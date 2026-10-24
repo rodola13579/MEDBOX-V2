@@ -1,0 +1,38 @@
+========================================================================
+        HƯỚNG DẪN MỞ GIAO DIỆN WEB SMARTMED (HỘP THUỐC THÔNG MINH)
+========================================================================
+
+CÁCH 1: NHẤP ĐÚP CHUỘT (NHANH NHẤT - KHUYÊN DÙNG)
+------------------------------------------------------------------------
+1. Vào thư mục dự án "new".
+2. Khi muốn MỞ hệ thống: Nhấp đúp chuột vào file:
+   👉 KHOI_DONG_HE_THONG.bat
+   Hệ thống sẽ kiểm tra Mosquitto Broker, mở Backend và tự bật trình duyệt Web (http://localhost:8000).
+
+3. Khi muốn TẮT hệ thống: Nhấp đúp chuột vào file:
+   👉 DUNG_HE_THONG.bat
+   Hệ thống sẽ đóng Backend và giải phóng cổng 8000 an toàn.
+
+
+CÁCH 2: DÙNG LỆNH CMD / POWERSHELL
+------------------------------------------------------------------------
+Do cửa sổ CMD mặc định mở tại "C:\Users\User>", bạn cần copy và dán chính xác lệnh sau vào CMD:
+
+Lệnh 1 - Chuyển thẳng đến thư mục backend:
+cd /d "C:\Users\User\OneDrive - The University of Technology\Desktop\new\backend"
+
+Lệnh 2 - Khởi chạy server:
+python -m uvicorn main:app --host 127.0.0.1 --port 8000
+
+(Hoặc dán gộp cả 2 lệnh trong 1 lần nhấn Enter):
+cd /d "C:\Users\User\OneDrive - The University of Technology\Desktop\new\backend" && python -m uvicorn main:app --host 127.0.0.1 --port 8000
+
+Sau đó mở trình duyệt truy cập: http://127.0.0.1:8000
+
+
+CÁCH 3: TẠO PHÍM TẮT (SHORTCUT) RA NGOÀI MÀN HÌNH CHÍNH (DESKTOP)
+------------------------------------------------------------------------
+1. Nhấp chuột phải vào file "KHOI_DONG_HE_THONG.bat".
+2. Chọn "Show more options" (nếu là Windows 11) -> "Send to" -> "Desktop (create shortcut)".
+3. Từ nay, mỗi lần muốn dùng bạn chỉ cần nhấp đúp vào biểu tượng shortcut trên màn hình Desktop!
+========================================================================

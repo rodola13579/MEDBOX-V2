@@ -1,0 +1,487 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>SmartMed — Hộp Thuốc Thông Minh (Smart Pill Dispenser)</title>
+  <meta name="description" content="Giao diện Web điều khiển và giám sát Hộp thuốc thông minh SmartMed với mô hình 3D xoay 360 độ, quản lý lịch uống 4 buổi chuẩn 24h và kiểm thử phần cứng.">
+
+  <!-- Google Fonts: Plus Jakarta Sans -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+
+  <!-- Core CSS Design System -->
+  <link rel="stylesheet" href="./css/style.css?v=2">
+</head>
+<body>
+
+  <!-- ========================================================================
+       TOP HEADER & STATUS BAR
+       ======================================================================== -->
+  <header class="app-header">
+    <div class="header-container">
+      <div class="brand-wrapper">
+        <div class="brand-icon">💊</div>
+        <div class="brand-info">
+          <h1>SmartMed <span class="badge">IoT Medical</span></h1>
+          <p>Hộp Thuốc Thông Minh & Nhắc Lịch Uống Tự Động</p>
+        </div>
+      </div>
+
+      <div class="header-telemetry">
+        <div id="hw-status-chip" class="status-chip offline">
+          <span class="status-dot"></span>
+          <span id="hw-status-text">Đang kết nối...</span>
+        </div>
+
+        <span id="header-fsm-badge" class="status-chip" style="font-weight:700;">SAFE_HOME_IDLE</span>
+        <span id="header-env-badge" class="status-chip" title="Cảm biến DHT11">🌡️ --°C | 💧 --%</span>
+        <span id="header-wifi-badge" class="status-chip">📶 -58 dBm</span>
+        <div id="header-live-clock" class="header-time tabular-nums">00:00:00</div>
+      </div>
+    </div>
+  </header>
+
+  <!-- ========================================================================
+       NAVIGATION TABS (4 SPA TABS)
+       ======================================================================== -->
+  <nav class="nav-tabs-wrapper" aria-label="Điều hướng chính">
+    <div class="nav-tabs">
+      <button id="nav-tab-dashboard" class="tab-btn active" data-tab="tab-dashboard">
+        <span>📊</span> Tổng quan & Khay 3D
+      </button>
+      <button id="nav-tab-schedules" class="tab-btn" data-tab="tab-schedules">
+        <span>📅</span> Lịch uống 4 Buổi
+      </button>
+      <button id="nav-tab-device" class="tab-btn" data-tab="tab-device">
+        <span>🛠️</span> Kiểm thử phần cứng
+      </button>
+      <button id="nav-tab-history" class="tab-btn" data-tab="tab-history">
+        <span>📋</span> Nhật ký cữ uống
+      </button>
+    </div>
+  </nav>
+
+  <!-- ========================================================================
+       MAIN APP VIEWS CONTAINER
+       ======================================================================== -->
+  <main class="main-content">
+
+    <!-- ======================================================================
+         TAB 1: TỔNG QUAN & KHAY 3D (DASHBOARD HERO)
+         ====================================================================== -->
+    <section id="tab-dashboard" class="tab-pane active" aria-labelledby="nav-tab-dashboard">
+      <!-- 4 Stat Cards Grid -->
+      <div class="stats-grid">
+        <div class="stat-card">
+          <div class="stat-icon primary">⏰</div>
+          <div class="stat-body">
+            <div class="stat-label">Cữ uống kế tiếp</div>
+            <div id="stat-next-dose-val" class="stat-value tabular-nums">--:--</div>
+            <div id="stat-next-dose-sub" class="stat-sub">Đang đồng bộ...</div>
+          </div>
+        </div>
+
+        <div class="stat-card">
+          <div class="stat-icon success">🎯</div>
+          <div class="stat-body">
+            <div class="stat-label">Tuân thủ hôm nay</div>
+            <div id="stat-compliance-val" class="stat-value">100%</div>
+            <div class="stat-sub">Cữ uống đúng giờ</div>
+          </div>
+        </div>
+
+        <div class="stat-card">
+          <div class="stat-icon warning">⚠️</div>
+          <div class="stat-body">
+            <div class="stat-label">Cảnh báo tồn kho</div>
+            <div id="stat-low-stock-val" class="stat-value">Đầy đủ</div>
+            <div class="stat-sub">Ngăn có tồn kho ≤ 2 viên</div>
+          </div>
+        </div>
+
+        <div class="stat-card">
+          <div class="stat-icon secondary">🔄</div>
+          <div class="stat-body">
+            <div class="stat-label">Vị trí khay hiện tại</div>
+            <div id="stat-tray-pos-val" class="stat-value">Ngăn 0 (Home)</div>
+            <div class="stat-sub">Nắp che khóa bảo vệ 🔒</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Hero 2 Columns: 2D Model & Console -->
+      <div class="hero-grid">
+        <!-- Cột Trái: Mô hình Khay xoay 2D Top View (8 Ngăn Phân Màu) -->
+        <div class="card-panel">
+          <div class="panel-header">
+            <div class="panel-title">
+              <span>🔄</span> Mô Hình Khay Xoay 2D (8 Ngăn Phân Màu)
+            </div>
+            <span style="font-size:0.8rem; color:var(--primary); font-weight:700;">
+              📍 Cửa nạp/lấy thuốc cố định: Hướng 6 giờ
+            </span>
+          </div>
+
+          <div id="dispenser-2d-box" class="carousel-2d-box">
+            <div class="canvas-overlay-top">
+              <span id="current-slot-badge" class="canvas-badge safe-home-active">
+                🔒 <strong>Ngăn 0: Safe Home</strong> (Khóa nắp che an toàn tại cửa 6h)
+              </span>
+              <span class="canvas-badge" style="background:rgba(15,23,42,0.85); color:#38bdf8;">
+                Top View • 8 Ngăn
+              </span>
+            </div>
+
+            <!-- The SVG 2D Wheel is injected here by carousel2d.js -->
+
+            <div class="canvas-overlay-bottom">
+              <div class="led-indicator">
+                <span class="led-circle" id="led-indicator-dot"></span>
+                <span id="led-indicator-text">LED Cửa 6h: Chuẩn trực</span>
+              </div>
+              <span style="font-size:0.75rem; color:#475569; background:rgba(255,255,255,0.9); padding:0.25rem 0.6rem; border-radius:4px; font-weight:600;">
+                💡 Nhấp vào ngăn bất kỳ để xoay về hướng 6 giờ
+              </span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Cột Phải: Bảng Điều Khiển Tác Vụ (Dashboard Hero) -->
+        <div id="dashboard-console-area" class="console-wrapper">
+          <div class="card-panel">
+            <div class="panel-header">
+              <div class="panel-title">
+                <span>⚙️</span> Bảng Điều Khiển Tác Vụ
+              </div>
+              <span class="status-chip online" id="initial-fsm-chip">
+                SAFE_HOME_IDLE
+              </span>
+            </div>
+
+            <div class="fsm-status-card" style="margin-bottom:1.25rem;">
+              <div class="fsm-info">
+                <span class="fsm-label">Vị trí khay hiện tại</span>
+                <span class="fsm-val">Ngăn 0 (Safe Home 🔒)</span>
+              </div>
+              <span style="font-size:1.6rem;">🛡️</span>
+            </div>
+
+            <div class="btn-action-group">
+              <button id="btn-open-early-dispense" class="btn btn-secondary btn-lg" onclick="appState.consoleMode === 'EARLY_DISPENSE' ? cancelInlineTask() : openEarlyDispenseModal()">
+                ⚡ Lấy thuốc sớm theo Buổi
+              </button>
+              <button id="btn-open-refill-modal" class="btn btn-success btn-lg" onclick="appState.consoleMode === 'REFILL' ? cancelInlineTask() : openRefillModal(appState.selectedRefillSlot || 1)">
+                📥 Nạp / Nhập thuốc vào Ngăn
+              </button>
+            </div>
+
+            <div class="upcoming-doses-wrapper">
+              <div class="upcoming-doses-header">
+                <div style="display:flex; align-items:center; gap:0.4rem;">
+                  <span style="font-size:1rem;">⏰</span>
+                  <span style="font-size:0.85rem; font-weight:800; color:var(--text-main);">ĐƠN THUỐC TIẾP THEO</span>
+                </div>
+                <span style="font-size:0.75rem; color:var(--primary); font-weight:700;">Đang tải...</span>
+              </div>
+              <div class="upcoming-empty-card">
+                <span style="font-size:1.25rem;">ℹ️</span>
+                <div>
+                  <div style="font-weight:700; color:var(--text-main); font-size:0.82rem;">Đang tải đơn thuốc tiếp theo...</div>
+                  <div style="font-size:0.75rem; color:var(--text-muted); margin-top:2px;">Thông tin cữ uống được nạp tự động từ hệ thống.</div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Section: Lưới Tồn Kho 7 Ngăn Thuốc (Dưới Hero) -->
+      <div style="margin-top: 2rem;">
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:1rem;">
+          <h2 style="font-size:1.15rem; font-weight:800; color:var(--text-main); display:flex; align-items:center; gap:0.5rem;">
+            <span>📦</span> Tình Trạng Tồn Kho 7 Ngăn Thuốc
+          </h2>
+          <span style="font-size:0.8rem; color:var(--text-muted);">Khay 8 ngăn (Ngăn 0: Safe Home)</span>
+        </div>
+
+        <div id="slots-inventory-grid" class="slots-grid">
+          <!-- Rendered dynamically by app.js -->
+        </div>
+      </div>
+    </section>
+
+    <!-- ======================================================================
+         TAB 2: LỊCH UỐNG THUỐC 4 BUỔI (SCHEDULES TIMELINE)
+         ====================================================================== -->
+    <section id="tab-schedules" class="tab-pane" aria-labelledby="nav-tab-schedules">
+      <div class="schedule-header-actions">
+        <div>
+          <h2 style="font-size:1.25rem; font-weight:800; color:var(--text-main);">📅 Lịch Trình Uống Thuốc 4 Buổi (Chuẩn 24 Giờ)</h2>
+          <p style="font-size:0.85rem; color:var(--text-muted); margin-top:0.2rem;">
+            Tự động gom nhóm cữ uống trong ngày theo 4 buổi cố định. <strong>Chỉ cho phép đặt lịch cho các ngăn đang có thuốc.</strong>
+          </p>
+        </div>
+        <div style="display:flex; gap:0.5rem; align-items:center;">
+          <button id="btn-open-add-schedule" class="btn btn-primary">
+            <span>➕</span> Thêm cữ uống mới
+          </button>
+        </div>
+      </div>
+
+      <div id="schedules-sessions-container" class="session-container">
+        <!-- Rendered dynamically by app.js (Morning, Noon, Afternoon, Evening) -->
+      </div>
+    </section>
+
+    <!-- ======================================================================
+         TAB 3: KIỂM THỬ PHẦN CỨNG (HARDWARE DIAGNOSTICS)
+         ====================================================================== -->
+    <section id="tab-device" class="tab-pane" aria-labelledby="nav-tab-device">
+      <div style="margin-bottom:1.5rem;">
+        <h2 style="font-size:1.25rem; font-weight:800; color:var(--text-main);">🛠️ Bảng Chẩn Đoán & Kiểm Thử Phần Cứng ESP32</h2>
+        <p style="font-size:0.85rem; color:var(--text-muted); margin-top:0.2rem;">
+          Điều khiển trực tiếp động cơ bước 28BYJ-48, vi sai bước và kích hoạt tự động dò vạch cảm biến quang học TCRT5000.
+        </p>
+      </div>
+
+      <div class="diagnostics-grid">
+        <!-- Cột 1: Motor Control Dock 8 nút & Jog -->
+        <div class="card-panel">
+          <div class="panel-header">
+            <div class="panel-title"><span>🎯</span> Motor Dock Điều Khiển 8 Vị Trí</div>
+            <span style="font-size:0.8rem; color:var(--text-muted);">Bước xoay 45°/slot</span>
+          </div>
+
+          <p style="font-size:0.85rem; color:var(--text-muted); margin-bottom:1rem;">
+            Bấm trực tiếp vào vị trí slot để lệnh cho ESP32 xoay khay ngay đến ngăn đó:
+          </p>
+
+          <div id="motor-dock-buttons-container" class="motor-dock-buttons">
+            <!-- 8 buttons rendered dynamically by app.js -->
+          </div>
+
+          <div class="jog-controls">
+            <button id="btn-jog-back" class="btn btn-secondary" style="flex:1;">
+              ◀ Bước lùi -45°
+            </button>
+            <button id="btn-jog-next" class="btn btn-secondary" style="flex:1;">
+              Bước tiến +45° ▶
+            </button>
+          </div>
+
+          <!-- Auto-Homing Card -->
+          <div class="homing-box">
+            <div>
+              <div style="font-weight:700; color:var(--text-main);">🎯 Hiệu Chuẩn Auto-Homing TCRT5000</div>
+              <div style="font-size:0.75rem; color:var(--text-muted); margin-top:0.2rem;">
+                ESP32 xoay chậm dò tìm vạch phản xạ quang học và dừng chuẩn xác tại Slot 0 Safe Home.
+              </div>
+            </div>
+            <button id="btn-trigger-homing" class="btn btn-success">
+              Kích hoạt Homing
+            </button>
+          </div>
+        </div>
+
+        <!-- Cột 2: Telemetry Hardware Card -->
+        <div class="card-panel">
+          <div class="panel-header">
+            <div class="panel-title"><span>📡</span> Thông Số Viễn Trắc (Telemetry)</div>
+            <span class="status-chip online">Live</span>
+          </div>
+
+          <div class="telemetry-list">
+            <div class="telemetry-row">
+              <span class="telemetry-label">Thiết bị ID:</span>
+              <span class="telemetry-val" id="telem-device-id">SMARTMED-ESP32-001</span>
+            </div>
+            <div class="telemetry-row">
+              <span class="telemetry-label">Trạng thái FSM:</span>
+              <span class="telemetry-val" id="telem-fsm">SAFE_HOME_IDLE</span>
+            </div>
+            <div class="telemetry-row">
+              <span class="telemetry-label">Góc khay hiện tại:</span>
+              <span class="telemetry-val" id="telem-angle">0.0° (Slot 0)</span>
+            </div>
+            <div class="telemetry-row">
+              <span class="telemetry-label">Cường độ Wi-Fi (RSSI):</span>
+              <span class="telemetry-val" id="telem-rssi">-58 dBm (Tốt)</span>
+            </div>
+            <div class="telemetry-row">
+              <span class="telemetry-label">Nhiệt độ phòng (DHT11):</span>
+              <span class="telemetry-val" id="telem-temp">-- °C</span>
+            </div>
+            <div class="telemetry-row">
+              <span class="telemetry-label">Độ ẩm không khí (DHT11):</span>
+              <span class="telemetry-val" id="telem-humid">-- %</span>
+            </div>
+            <div class="telemetry-row">
+              <span class="telemetry-label">RAM Free Heap:</span>
+              <span class="telemetry-val" id="telem-heap">194.2 KB</span>
+            </div>
+            <div class="telemetry-row">
+              <span class="telemetry-label">Thời gian hoạt động (Uptime):</span>
+              <span class="telemetry-val" id="telem-uptime">3 giờ 42 phút</span>
+            </div>
+            <div class="telemetry-row">
+              <span class="telemetry-label">Phiên bản Firmware:</span>
+              <span class="telemetry-val">v2.1.0-Release</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ======================================================================
+         TAB 4: NHẬT KÝ CỮ UỐNG (AUDIT DOSE LOGS)
+         ====================================================================== -->
+    <section id="tab-history" class="tab-pane" aria-labelledby="nav-tab-history">
+      <div style="margin-bottom:1.5rem;">
+        <h2 style="font-size:1.25rem; font-weight:800; color:var(--text-main);">📋 Nhật Ký Kiểm Toán Cữ Uống (Audit Logs)</h2>
+        <p style="font-size:0.85rem; color:var(--text-muted); margin-top:0.2rem;">
+          Lịch sử chi tiết toàn bộ các lần cấp thuốc, uống thuốc đúng giờ, lấy sớm hoặc bỏ lỡ.
+        </p>
+      </div>
+
+      <div class="filter-bar">
+        <button class="filter-chip active" data-filter="ALL">Tất cả cữ</button>
+        <button class="filter-chip" data-filter="TAKEN">🟢 Đã uống</button>
+        <button class="filter-chip" data-filter="MISSED">🟡 Bỏ lỡ</button>
+        <button class="filter-chip" data-filter="JAMMED">🔴 Kẹt cơ / Lỗi</button>
+      </div>
+
+      <div class="table-responsive">
+        <table class="data-table">
+          <thead>
+            <tr>
+              <th>ID</th>
+              <th>Thời gian cấp</th>
+              <th>Ngăn khay</th>
+              <th>Tên thuốc</th>
+              <th>Trạng thái</th>
+            </tr>
+          </thead>
+          <tbody id="history-table-body">
+            <!-- Rendered dynamically by app.js -->
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+  </main>
+  <!-- ========================================================================
+       MODAL: ĐẶT LỊCH UỐNG THUỐC — ĐỒNG BỘ ESP32 (SET GIỜ -> CHỌN NGĂN)
+       ======================================================================== -->
+  <div id="modal-add-schedule" class="modal-backdrop">
+    <div class="modal-window" style="max-width: 580px;">
+      <div class="modal-header">
+        <div class="modal-title"><span>⏰</span> Đặt Lịch Uống Thuốc (Đồng bộ Thiết bị)</div>
+        <button class="btn-close-modal" aria-label="Đóng">&times;</button>
+      </div>
+
+      <form id="form-add-schedule">
+        <div class="modal-body" style="gap: 1.1rem;">
+          <!-- Cảnh báo nếu không có ngăn nào có thuốc -->
+          <div id="alert-no-meds-available" style="display:none; background:var(--warning-light); border:1px solid var(--warning-border); padding:0.75rem; border-radius:var(--radius-md); color:#92400e; font-size:0.85rem;">
+            ⚠️ <strong>Tất cả các ngăn hiện đang trống thuốc!</strong><br>
+            Bạn cần nạp thuốc vào ngăn tại trang Tổng quan trước khi tạo lịch uống.
+          </div>
+
+          <!-- BƯỚC 1: THIẾT LẬP GIỜ UỐNG -->
+          <div class="schedule-step-box">
+            <div class="schedule-step-header">
+              <span class="step-number-badge">1</span>
+              <div>
+                <strong style="color:var(--text-main); font-size:0.95rem;">Bước 1: Thiết lập giờ uống</strong>
+                <p class="form-hint" style="margin:2px 0 0 0;">Chọn mốc thời gian 24 giờ cho cữ uống</p>
+              </div>
+            </div>
+
+            <div class="form-group" style="margin-top:0.75rem;">
+              <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:4px;">
+                <label class="form-label" style="margin:0;">Thời gian uống (Chuẩn 24H: 00:00 – 23:59)</label>
+                <span id="time-24h-display-pill" style="font-size:0.9rem; font-weight:800; color:var(--primary-color); background:rgba(37,99,235,0.08); padding:3px 10px; border-radius:14px; font-variant-numeric:tabular-nums;">08:00</span>
+              </div>
+              <div style="display:grid; grid-template-columns: 1fr 1fr; gap:0.6rem;">
+                <div>
+                  <label class="form-hint" for="new-schedule-hour" style="font-weight:600; margin-bottom:4px; display:block;">Giờ (00 – 23)</label>
+                  <select id="new-schedule-hour" class="form-select tabular-nums" required style="font-weight:600;">
+                    <!-- Tự động điền 00 đến 23 -->
+                  </select>
+                </div>
+                <div>
+                  <label class="form-hint" for="new-schedule-minute" style="font-weight:600; margin-bottom:4px; display:block;">Phút (00 – 59)</label>
+                  <select id="new-schedule-minute" class="form-select tabular-nums" required style="font-weight:600;">
+                    <!-- Tự động điền 00 đến 59 -->
+                  </select>
+                </div>
+              </div>
+              <!-- Giá trị giờ tổng hợp chuẩn 24h HH:MM -->
+              <input type="hidden" id="new-schedule-time" value="08:00">
+              <div style="margin-top:0.5rem; display:flex; align-items:center; justify-content:space-between;">
+                <span class="form-hint">Nhãn buổi tự động:</span>
+                <span id="time-session-preview-badge" class="session-badge morning">🌅 Buổi Sáng (05:00 - 10:59)</span>
+              </div>
+            </div>
+          </div>
+
+          <!-- BƯỚC 2: CHỌN CÁC NGĂN TƯƠNG ỨNG -->
+          <div class="schedule-step-box">
+            <div class="schedule-step-header" style="justify-content:space-between;">
+              <div style="display:flex; align-items:center; gap:0.6rem;">
+                <span class="step-number-badge">2</span>
+                <div>
+                  <strong style="color:var(--text-main); font-size:0.95rem;">Bước 2: Chọn ngăn thuốc tương ứng</strong>
+                  <p class="form-hint" style="margin:2px 0 0 0;">Tích chọn các ngăn cần uống vào mốc giờ này</p>
+                </div>
+              </div>
+              <div style="display:flex; gap:0.4rem; align-items:center;">
+                <button type="button" id="btn-select-all-slots" class="btn-slot-quick-action" title="Chọn tất cả ngăn có thuốc">Tất cả</button>
+                <button type="button" id="btn-deselect-all-slots" class="btn-slot-quick-action" title="Bỏ chọn tất cả ngăn">Bỏ chọn</button>
+              </div>
+            </div>
+
+            <div style="display:flex; justify-content:space-between; align-items:center; margin:0.6rem 0 0.4rem 0;">
+              <span class="form-hint">Danh sách ngăn đã nạp thuốc:</span>
+              <span id="schedule-selected-count-badge" style="font-size:0.8rem; font-weight:700; color:var(--primary);">0 ngăn đã chọn</span>
+            </div>
+
+            <!-- Danh sách checkboxes các ngăn (render bởi JS) -->
+            <div id="schedule-slots-selector-container" class="schedule-slots-selector-list">
+              <!-- Rendered dynamically by app.js -->
+            </div>
+          </div>
+        </div>
+
+        <div class="modal-footer" style="justify-content:space-between;">
+          <div style="font-size:0.8rem; color:var(--text-muted); display:flex; align-items:center; gap:0.35rem;">
+            <span>🔄</span> Tự động đồng bộ Flash NVS ESP32
+          </div>
+          <div style="display:flex; gap:0.6rem;">
+            <button type="button" class="btn btn-secondary btn-cancel-modal">Hủy bỏ</button>
+            <button type="submit" id="btn-submit-schedule" class="btn btn-primary">
+              💾 Lưu cữ & Đồng bộ
+            </button>
+          </div>
+        </div>
+      </form>
+    </div>
+  </div>
+
+
+
+  <!-- Toast Notifications Container -->
+  <div id="toast-container" class="toast-container" aria-live="polite"></div>
+
+  <!-- ========================================================================
+       SCRIPTS: SMARTMED 2D DISPENSER & CLIENT MODULES (ZERO DEPENDENCIES)
+       ======================================================================== -->
+  <script src="./js/api.js?v=2026_dose_setting_v1"></script>
+  <script src="./js/ws.js?v=2026_dose_setting_v1"></script>
+  <script src="./js/carousel2d.js?v=2026_dose_setting_v1"></script>
+  <script src="./js/app.js?v=2026_dose_setting_v1"></script>
+
+</body>
+</html>
