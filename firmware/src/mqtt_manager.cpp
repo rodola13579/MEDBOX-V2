@@ -189,6 +189,7 @@ static void mqttCallback(char* topic, byte* payload, unsigned int length) {
     }
 
     String topicStr = String(topic);
+    tftResetActivityTimer();
 
     // 1. LỆNH ĐỒNG BỘ LỊCH UỐNG: cmd/sync_schedules
     if (topicStr.endsWith("/cmd/sync_schedules")) {

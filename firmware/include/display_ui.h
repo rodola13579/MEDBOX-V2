@@ -54,6 +54,13 @@ extern int clockY, cardY, cardH, tileY, tileH, cellW, tileW;
 void displayInit();
 void calcLayout();
 
+// Quản lý chế độ ngủ Màn hình TFT (TFT Sleep Mode)
+bool isTftSleeping();
+void tftSleep();
+void tftWake();
+void tftResetActivityTimer();
+void tftCheckSleepTimeout(Screen curScreen, int curFsm);
+
 // Điều phối render màn hình
 void render(bool full);
 

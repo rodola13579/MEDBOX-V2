@@ -675,6 +675,8 @@ void tickSchedule() {
     if (newMask != 0) {
       Serial.printf("[SCHEDULE] >>> DEN GIO UONG THUOC: Mask 0x%02X!\n",
                     newMask);
+      tftWake();
+      tftResetActivityTimer();
       fsmTriggerDueAlert(newMask);
       return; // Cữ thuốc đã kích hoạt -> Thoát ngay, KHÔNG đánh dấu homeDirty!
     }
@@ -709,6 +711,7 @@ void toggleWifiMode() {
 void goTo(Screen s) {
   screen = s;
   homeDirty = false;
+  tftResetActivityTimer();
   render(true);
 }
 
@@ -957,6 +960,15 @@ void handleInput() {
   uint8_t p = btnPush.poll();
   uint8_t b = btnBack.poll();
 
+  if (d != 0 || p != 0 || b != 0) {
+    if (isTftSleeping()) {
+      // Blind Click Protection: Lần chạm/xoay đầu tiên chỉ đánh thức màn hình
+      tftWake();
+      tftResetActivityTimer();
+      return;
+    }
+    tftResetActivityTimer();
+  }
 
   if (d != 0) {
     audioPlayClick(); // Tiếng click nhẹ khi vặn núm xoay EC11
@@ -1815,25 +1827,31 @@ void loop() {
   dhtSensorUpdate();
   mqttManagerUpdate();
 
-  if (homeDirty) {
-    homeDirty = false;
-    if (screen == S_HOME) {
-      drawHome(false);
-    } else if (screen == S_SCHED) {
-      drawSched(false);
-    } else if (screen == S_SCHED_DETAIL) {
-      drawSchedDetail(false);
-    }
-  }
+  // 1. Quản lý tự động chuyển sang chế độ ngủ cho màn hình TFT (TFT Sleep Mode)
+  // Sau 60s không tương tác ở màn chính -> Tắt đèn nền & đưa ST7789 vào Sleep In
+  tftCheckSleepTimeout(screen, fsmGetState());
 
-  // Cập nhật đồng hồ Trang chủ khi sang phút mới
-  static uint32_t lastHomeMin = 0xFFFFFFFF;
-  uint32_t curMin = absSec() / 60;
-  if (screen == S_HOME && curMin != lastHomeMin) {
-    lastHomeMin = curMin;
-    drawHomeClock();
-    if (wifiState != WIFI_ST_CONNECTED) {
-      drawHomeHeader();
+  if (!isTftSleeping()) {
+    if (homeDirty) {
+      homeDirty = false;
+      if (screen == S_HOME) {
+        drawHome(false);
+      } else if (screen == S_SCHED) {
+        drawSched(false);
+      } else if (screen == S_SCHED_DETAIL) {
+        drawSchedDetail(false);
+      }
+    }
+
+    // Cập nhật đồng hồ Trang chủ khi sang phút mới
+    static uint32_t lastHomeMin = 0xFFFFFFFF;
+    uint32_t curMin = absSec() / 60;
+    if (screen == S_HOME && curMin != lastHomeMin) {
+      lastHomeMin = curMin;
+      drawHomeClock();
+      if (wifiState != WIFI_ST_CONNECTED) {
+        drawHomeHeader();
+      }
     }
   }
 

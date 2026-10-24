@@ -29,11 +29,13 @@
 #define PIN_TFT_BLK                                                            \
   48 // Chân 8 (BLK) trên JP1 -> Nối GPIO 48
 
-// Điều khiển đèn nền màn hình luôn sáng 100% (Không tắt màn hình)
-#define TFT_BLK_PWM_CH      0       // Kênh LEDC PWM 0
-#define TFT_BLK_PWM_FREQ    5000    // Tần số PWM 5kHz (chống chớp nháy)
-#define TFT_BLK_PWM_RES     8       // Độ phân giải 8-bit (0..255)
-#define TFT_BRIGHTNESS_MAX  255     // Độ sáng 100%
+// Điều khiển đèn nền màn hình & Chế độ ngủ TFT
+#define TFT_BLK_PWM_CH        0        // Kênh LEDC PWM 0
+#define TFT_BLK_PWM_FREQ      5000     // Tần số PWM 5kHz (chống chớp nháy)
+#define TFT_BLK_PWM_RES       8        // Độ phân giải 8-bit (0..255)
+#define TFT_BRIGHTNESS_MAX    255      // Độ sáng 100% khi hoạt động
+#define TFT_BRIGHTNESS_OFF    0        // Tắt hẳn đèn nền khi ngủ (0%)
+#define TFT_SLEEP_TIMEOUT_MS  60000UL  // 60 giây không tương tác -> Ngủ màn hình
 // Núm xoay vô cực EC11 & Nút bấm
 #define PIN_EC11_CLK 38 // Chân 9 (A) trên JP1
 #define PIN_EC11_DT 39  // Chân 10 (B) trên JP1

@@ -39,6 +39,65 @@ void calcLayout() {
 }
 
 
+// ----------------------------------------------------------------------------
+// 2.1. QUẢN LÝ CHẾ ĐỘ NGỦ MÀN HÌNH TFT (TFT SLEEP MODE)
+// ----------------------------------------------------------------------------
+static bool tftIsSleeping = false;
+static unsigned long lastTftActivityMs = 0;
+
+bool isTftSleeping() {
+  return tftIsSleeping;
+}
+
+void tftResetActivityTimer() {
+  lastTftActivityMs = millis();
+  if (tftIsSleeping) {
+    tftWake();
+  }
+}
+
+void tftSleep() {
+  if (!tftIsSleeping) {
+    tftIsSleeping = true;
+    // 1. Tắt đèn nền qua PWM và kéo LOW chân BLK
+    ledcWrite(TFT_BLK_PWM_CH, TFT_BRIGHTNESS_OFF);
+    digitalWrite(PIN_TFT_BLK, LOW);
+    // 2. Gửi lệnh đưa IC ST7789 vào chế độ ngủ sâu (Sleep In)
+    tft.writecommand(0x10); // ST7789_SLPIN
+    Serial.println("[TFT] Màn hình chuyển sang chế độ ngủ (TFT Sleep Mode).");
+  }
+}
+
+void tftWake() {
+  if (tftIsSleeping) {
+    tftIsSleeping = false;
+    // 1. Gửi lệnh đánh thức IC ST7789 (Sleep Out)
+    tft.writecommand(0x11); // ST7789_SLPOUT
+    delay(10);
+    // 2. Bật lại đèn nền sáng 100%
+    ledcWrite(TFT_BLK_PWM_CH, TFT_BRIGHTNESS_MAX);
+    digitalWrite(PIN_TFT_BLK, HIGH);
+    // 3. Vẽ lại nội dung giao diện hiện tại
+    render(true);
+    Serial.println("[TFT] Đánh thức màn hình sáng trở lại 100%.");
+  }
+}
+
+void tftCheckSleepTimeout(Screen curScreen, int curFsm) {
+  if (!tftIsSleeping) {
+    // Chỉ cho phép ngủ khi đang ở màn hình chính S_HOME và FSM rảnh rỗi (SAFE_HOME_IDLE).
+    // Tuyệt đối KHÔNG ngủ khi đang có cữ thuốc báo động, đang mở ngăn hoặc nạp thuốc!
+    if (curScreen == S_HOME && curFsm == (int)FSM_SAFE_HOME_IDLE) {
+      if (millis() - lastTftActivityMs >= TFT_SLEEP_TIMEOUT_MS) {
+        tftSleep();
+      }
+    } else {
+      // Khi đang ở màn hình khác hoặc đang bận -> liên tục làm mới bộ đếm
+      lastTftActivityMs = millis();
+    }
+  }
+}
+
 void displayInit() {
   // 1. Tạo xung Reset phần cứng dứt khoát trên PIN_TFT_RST (GPIO 10) để giải phóng IC ST7789
   pinMode(PIN_TFT_RST, OUTPUT);
@@ -70,6 +129,9 @@ void displayInit() {
   pinMode(PIN_TFT_BLK, OUTPUT);
   gpio_set_drive_capability((gpio_num_t)PIN_TFT_BLK, GPIO_DRIVE_CAP_3);
   digitalWrite(PIN_TFT_BLK, HIGH);
+
+  lastTftActivityMs = millis();
+  tftIsSleeping = false;
 }
 
 // ----------------------------------------------------------------------------

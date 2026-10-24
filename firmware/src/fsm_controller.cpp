@@ -272,6 +272,8 @@ void fsmUpdate() {
 
 // 1. Kích hoạt cữ thuốc đến giờ
 void fsmTriggerDueAlert(uint8_t slotMask) {
+    tftWake();
+    tftResetActivityTimer();
     if (currentState == FSM_ALERTING_DUE || currentState == FSM_ROTATING_TO_DOSE || currentState == FSM_WAITING_TAKEN) {
         dueMask |= slotMask;
         Serial.printf("[FSM] Bo sung ngan vao cu dang uong: dueMask = 0x%02X\n", dueMask);
