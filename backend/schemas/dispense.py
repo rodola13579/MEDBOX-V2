@@ -59,6 +59,10 @@ class DoseLogResponse(BaseModel):
     trigger_source: TriggerType
     notes: str | None
     created_at: str
+    medicine_name: str | None = None
+    medicine_dosage_unit: str | None = None
+    schedule_time: str | None = None
+    schedule_label: str | None = None
 
     model_config = {"from_attributes": True}
 

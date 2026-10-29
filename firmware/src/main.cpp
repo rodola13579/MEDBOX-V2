@@ -379,14 +379,22 @@ void loadData() {
   }
   homeOffset = prefs.getShort("h_off", 0);
   stepsPerSlot = prefs.getShort("s_step", STEPS_PER_SLOT);
-  if (stepsPerSlot < 400 || stepsPerSlot > 600)
+  bool sStepMigrated = false;
+  if (stepsPerSlot < (STEPS_PER_SLOT * 3 / 4) || stepsPerSlot > (STEPS_PER_SLOT * 5 / 4)) {
+    Serial.printf("[MOTOR] Phat hien s_step cu (%d) hoac bat thuong -> Cap nhat ve %d buoc/ngan!\r\n", stepsPerSlot, STEPS_PER_SLOT);
     stepsPerSlot = STEPS_PER_SLOT;
+    sStepMigrated = true;
+  }
   wifiState = (WifiState)prefs.getUChar("w_st", WIFI_ST_CONNECTED);
   if (wifiState > WIFI_ST_AP)
     wifiState = WIFI_ST_CONNECTED;
   schedTakenMask = prefs.getUShort("s_tmask", 0);
   schedTakenDay = prefs.getUChar("s_tday", 0xFF);
   prefs.end();
+  if (sStepMigrated) {
+    saveCfg();
+    Serial.println("[MOTOR] Da cap nhat STEPS_PER_SLOT moi vao Flash NVS thanh cong!");
+  }
   for (int i = 0; i < N_SLOTS; i++)
     meds[i].name[NAME_LEN] = 0;
 }
@@ -468,11 +476,14 @@ bool findNext(int &idxOut, int &minsOut) {
 // ----------------------------------------------------------------------------
 // 6. NGHIỆP VỤ Y TẾ & THAO TÁC KHAY
 // ----------------------------------------------------------------------------
-void addHist(int slot, uint8_t type) {
+void addHist(int slot, uint8_t type, uint8_t sessionIdx, uint8_t schedH, uint8_t schedM) {
   hist[histHead].day = curDay();
   hist[histHead].min = curMinOfDay();
   hist[histHead].slot = slot;
   hist[histHead].type = type;
+  hist[histHead].session = sessionIdx;
+  hist[histHead].sched_h = schedH;
+  hist[histHead].sched_m = schedM;
   histHead = (histHead + 1) % N_HIST;
   if (histCount < N_HIST)
     histCount++;

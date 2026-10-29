@@ -244,27 +244,48 @@ class DispensingEngine:
         """
         session = await self._clear_session_and_cancel_watchdog()
         slot = int(data.get("slot") or device_state.current_slot or 0)
+        is_early = (
+            data.get("event") == "EARLY_TAKEN"
+            or data.get("trigger") == "EARLY_MANUAL"
+            or (session and session.trigger_source == "EARLY_MANUAL")
+        )
+        trigger_src = "EARLY_MANUAL" if is_early else "LOCAL_BUTTON"
+        status_val = "EARLY_TAKEN" if is_early else "TAKEN"
 
         async with get_db_context() as db:
             if session:
                 # Cữ uống phát sinh từ Web / Scheduler có session
-                log = await dose_log_repo.mark_taken(db, session.dose_log_id, trigger_source="LOCAL_BUTTON")
+                log = await dose_log_repo.mark_taken(
+                    db, session.dose_log_id, trigger_source=trigger_src, status=status_val
+                )
                 await self._decrement_stock(db, session.slot_number)
                 target_slot = session.slot_number
             elif slot >= 1 and slot <= 7:
                 # Cữ uống phát sinh độc lập từ lịch NVS trên ESP32
-                log_id = await dose_log_repo.create(
+                now_str = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S")
+                sched_time_str = data.get("sched_time")
+                if sched_time_str and ":" in sched_time_str:
+                    now_date = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+                    sched_full = f"{now_date} {sched_time_str}:00"
+                else:
+                    sched_full = now_str
+
+                note_str = "Lấy thuốc sớm từ ESP32" if is_early else "Uống thuốc theo cữ từ ESP32"
+                pending = await dose_log_repo.create_pending(
                     db,
                     device_id=DEVICE_ID,
                     slot_number=slot,
+                    scheduled_time=sched_full,
+                    trigger_source=trigger_src,
                     schedule_id=None,
-                    trigger_source="LOCAL_SCHEDULE_BUTTON",
-                    status="TAKEN"
+                    notes=note_str,
                 )
-                log = await dose_log_repo.get_by_id(db, log_id)
+                log = await dose_log_repo.mark_taken(
+                    db, pending["id"], trigger_source=trigger_src, status=status_val
+                )
                 await self._decrement_stock(db, slot)
                 target_slot = slot
-                logger.info(f"[DISPENSE] TAKEN độc lập từ ESP32: Slot {slot}, đã trừ tồn kho Database.")
+                logger.info(f"[DISPENSE] {status_val} ({trigger_src}) từ ESP32: Slot {slot}, đã trừ tồn kho Database.")
             else:
                 log = None
                 target_slot = slot
@@ -277,6 +298,53 @@ class DispensingEngine:
         logger.info(
             f"[DISPENSE] TAKEN (nút vật lý): slot={target_slot} — đã cập nhật DB."
         )
+
+    async def on_missed(self, data: dict) -> None:
+        """
+        Callback: Nhận cảnh báo bỏ lỡ cữ thuốc từ ESP32 (quá 15 phút không uống).
+        Ghi nhận trạng thái MISSED vào dose_logs.
+        """
+        session = await self._clear_session_and_cancel_watchdog()
+        slot = int(data.get("slot") or (session.slot_number if session else 0))
+        now_str = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S")
+
+        sched_time_str = data.get("sched_time")
+        if sched_time_str and ":" in sched_time_str:
+            now_date = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+            sched_full = f"{now_date} {sched_time_str}:00"
+        else:
+            sched_full = now_str
+
+        async with get_db_context() as db:
+            if session:
+                await dose_log_repo.mark_missed(
+                    db, session.dose_log_id,
+                    notes="Quá 15 phút không uống (Timeout từ ESP32)"
+                )
+                target_slot = session.slot_number
+            elif 1 <= slot <= 7:
+                pending = await dose_log_repo.create_pending(
+                    db,
+                    device_id=DEVICE_ID,
+                    slot_number=slot,
+                    scheduled_time=sched_full,
+                    trigger_source="SCHEDULED",
+                    notes="Quá 15 phút không lấy thuốc (Timeout ESP32)",
+                )
+                await dose_log_repo.mark_missed(
+                    db, pending["id"],
+                    notes="Quá 15 phút không lấy thuốc (Timeout ESP32)"
+                )
+                target_slot = slot
+            else:
+                target_slot = 0
+
+        await ws_manager.broadcast(WS_MISSED, {
+            "slot_number": target_slot,
+            "status": "MISSED",
+            "reason": "Quá 15 phút không uống thuốc (Timeout ESP32)",
+        })
+        logger.warning(f"[DISPENSE] Đã ghi nhận MISSED cho Ngăn {target_slot} từ ESP32")
 
     async def on_home_reached(self, data: dict) -> None:
         """

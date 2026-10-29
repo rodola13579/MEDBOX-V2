@@ -435,13 +435,19 @@ void mqttPublishHomeReached() {
     mqttClient.publish("pillbox/" DEVICE_ID "/events/home", buf, false);
 }
 
-void mqttPublishTaken(uint8_t slot, uint8_t dose) {
+void mqttPublishTaken(uint8_t slot, uint8_t dose, const char *trigger, const char *schedTime) {
     if (!mqttClient.connected()) return;
-    StaticJsonDocument<128> doc;
+    StaticJsonDocument<192> doc;
     doc["event"] = "TAKEN";
     doc["slot"] = slot;
     doc["dose"] = dose;
-    char buf[128];
+    if (trigger && strlen(trigger) > 0) {
+        doc["trigger"] = trigger;
+    }
+    if (schedTime && strlen(schedTime) > 0) {
+        doc["sched_time"] = schedTime;
+    }
+    char buf[192];
     serializeJson(doc, buf);
     mqttClient.publish("pillbox/" DEVICE_ID "/events/taken", buf, false);
 }
@@ -458,12 +464,15 @@ void mqttPublishEarlyTaken(uint8_t h, uint8_t m, uint8_t mask) {
     mqttClient.publish("pillbox/" DEVICE_ID "/events/taken", buf, false);
 }
 
-void mqttPublishMissed(uint8_t slot) {
+void mqttPublishMissed(uint8_t slot, const char *schedTime) {
     if (!mqttClient.connected()) return;
-    StaticJsonDocument<128> doc;
+    StaticJsonDocument<160> doc;
     doc["event"] = "MISSED";
     doc["slot"] = slot;
-    char buf[128];
+    if (schedTime && strlen(schedTime) > 0) {
+        doc["sched_time"] = schedTime;
+    }
+    char buf[160];
     serializeJson(doc, buf);
     mqttClient.publish("pillbox/" DEVICE_ID "/events/missed", buf, false);
 }

@@ -3,6 +3,8 @@ import asyncio
 import json
 import sys
 
+import pytest
+
 try:
     import websockets
 except ImportError:
@@ -10,6 +12,7 @@ except ImportError:
     sys.exit(0)
 
 
+@pytest.mark.asyncio
 async def test_ws():
     uri = "ws://localhost:8000/ws"
     try:
@@ -51,9 +54,8 @@ async def test_ws():
 
             print("\nPASS: WebSocket flow hoan chinh!")
 
-    except ConnectionRefusedError:
-        print("FAIL: Khong ket noi duoc server (chay server truoc?)")
-        sys.exit(1)
+    except (ConnectionRefusedError, OSError):
+        pytest.skip("Server local 8000 khong chay - bo qua test live websocket")
     except AssertionError as e:
         print(f"FAIL: {e}")
         sys.exit(1)

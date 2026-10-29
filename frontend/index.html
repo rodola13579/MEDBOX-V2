@@ -337,36 +337,148 @@
     <!-- ======================================================================
          TAB 4: NHẬT KÝ CỮ UỐNG (AUDIT DOSE LOGS)
          ====================================================================== -->
+    <!-- ======================================================================
+         TAB 4: NHẬT KÝ CỮ UỐNG (TRA CỨU THEO TỪNG NGÀY)
+         ====================================================================== -->
     <section id="tab-history" class="tab-pane" aria-labelledby="nav-tab-history">
-      <div style="margin-bottom:1.5rem;">
-        <h2 style="font-size:1.25rem; font-weight:800; color:var(--text-main);">📋 Nhật Ký Kiểm Toán Cữ Uống (Audit Logs)</h2>
-        <p style="font-size:0.85rem; color:var(--text-muted); margin-top:0.2rem;">
-          Lịch sử chi tiết toàn bộ các lần cấp thuốc, uống thuốc đúng giờ, lấy sớm hoặc bỏ lỡ.
-        </p>
+      <!-- Header with Action Buttons -->
+      <div class="history-header">
+        <div>
+          <h2 style="font-size:1.3rem; font-weight:800; color:var(--text-main); display:flex; align-items:center; gap:0.5rem;">
+            <span>📋</span> Nhật Ký Cữ Uống Theo Ngày
+          </h2>
+          <p style="font-size:0.875rem; color:var(--text-muted); margin-top:0.25rem;">
+            Theo dõi chi tiết thời gian thực tế, độ trễ/sớm và tỷ lệ tuân thủ điều trị theo từng ngày.
+          </p>
+        </div>
+        <div class="history-header-actions">
+          <button id="btn-export-history-csv" class="btn btn-secondary btn-sm" title="Tải xuống tệp CSV báo cáo cữ uống ngày đang chọn">
+            <span>📥</span> Xuất Báo Cáo CSV
+          </button>
+          <button id="btn-refresh-history" class="btn btn-primary btn-sm" title="Tải lại dữ liệu nhật ký mới nhất">
+            <span>🔄</span> Làm Mới
+          </button>
+        </div>
       </div>
 
-      <div class="filter-bar">
-        <button class="filter-chip active" data-filter="ALL">Tất cả cữ</button>
-        <button class="filter-chip" data-filter="TAKEN">🟢 Đã uống</button>
-        <button class="filter-chip" data-filter="MISSED">🟡 Bỏ lỡ</button>
-        <button class="filter-chip" data-filter="JAMMED">🔴 Kẹt cơ / Lỗi</button>
+      <!-- 4 KPI Hero Metric Cards -->
+      <div class="history-kpi-grid">
+        <div class="history-kpi-card kpi-adherence">
+          <div class="kpi-icon-box">🎯</div>
+          <div class="kpi-content">
+            <span class="kpi-label">Tỷ Lệ Tuân Thủ</span>
+            <div class="kpi-value-row">
+              <span id="hist-kpi-adherence" class="kpi-val tabular-nums">--%</span>
+              <span id="hist-kpi-badge" class="kpi-badge good">Tốt</span>
+            </div>
+            <span class="kpi-sub">Số cữ uống thành công</span>
+          </div>
+        </div>
+
+        <div class="history-kpi-card kpi-total">
+          <div class="kpi-icon-box">📦</div>
+          <div class="kpi-content">
+            <span class="kpi-label">Tổng Số Cữ</span>
+            <div class="kpi-value-row">
+              <span id="hist-kpi-total" class="kpi-val tabular-nums">0</span>
+              <span class="kpi-unit">cữ</span>
+            </div>
+            <span id="hist-kpi-scope" class="kpi-sub">Trong ngày chọn</span>
+          </div>
+        </div>
+
+        <div class="history-kpi-card kpi-taken">
+          <div class="kpi-icon-box">✅</div>
+          <div class="kpi-content">
+            <span class="kpi-label">Đã Uống (Đúng/Sớm)</span>
+            <div class="kpi-value-row">
+              <span id="hist-kpi-taken" class="kpi-val tabular-nums">0</span>
+              <span class="kpi-unit">cữ</span>
+            </div>
+            <span id="hist-kpi-taken-sub" class="kpi-sub">Đã hoàn thành</span>
+          </div>
+        </div>
+
+        <div class="history-kpi-card kpi-missed">
+          <div class="kpi-icon-box">⚠️</div>
+          <div class="kpi-content">
+            <span class="kpi-label">Bỏ Lỡ Cữ</span>
+            <div class="kpi-value-row">
+              <span id="hist-kpi-missed" class="kpi-val tabular-nums">0</span>
+              <span class="kpi-unit">cữ</span>
+            </div>
+            <span id="hist-kpi-missed-sub" class="kpi-sub">Chưa uống / quá giờ</span>
+          </div>
+        </div>
       </div>
 
-      <div class="table-responsive">
-        <table class="data-table">
-          <thead>
-            <tr>
-              <th>ID</th>
-              <th>Thời gian cấp</th>
-              <th>Ngăn khay</th>
-              <th>Tên thuốc</th>
-              <th>Trạng thái</th>
-            </tr>
-          </thead>
+      <!-- Advanced Single-Day Navigation & Filter Toolbar -->
+      <div class="history-toolbar card-panel">
+        <div class="history-toolbar-top">
+          <!-- Single Day Navigation -->
+          <div class="history-date-nav">
+            <button type="button" id="btn-prev-day" class="btn btn-outline btn-sm date-nav-btn" title="Xem ngày trước">
+              <span>◀</span> Ngày trước
+            </button>
+            <div class="date-picker-wrap">
+              <span class="date-icon">📅</span>
+              <input type="date" id="history-date-picker" class="form-input form-input-sm date-picker-input" />
+            </div>
+            <button type="button" id="btn-next-day" class="btn btn-outline btn-sm date-nav-btn" title="Xem ngày sau">
+              Ngày sau <span>▶</span>
+            </button>
+            <div class="quick-date-group">
+              <button type="button" id="btn-quick-today" class="btn-quick-date active">Hôm nay</button>
+              <button type="button" id="btn-quick-yesterday" class="btn-quick-date">Hôm qua</button>
+            </div>
+          </div>
+
+          <!-- Realtime Search Input -->
+          <div class="history-search-wrap">
+            <span class="search-icon">🔍</span>
+            <input type="text" id="history-search-input" class="form-input form-input-sm"
+              placeholder="Tìm theo tên thuốc, ngăn, mã..." />
+            <button type="button" id="btn-clear-search" class="btn-clear-search" style="display:none;"
+              title="Xóa tìm kiếm">✕</button>
+          </div>
+
+          <!-- Dual View Mode Toggle -->
+          <div class="view-mode-toggle" role="tablist" aria-label="Chế độ hiển thị">
+            <button type="button" id="btn-view-table" class="btn-toggle-mode active"
+              title="Hiển thị dạng bảng chi tiết">
+              <span>📊</span> Bảng dữ liệu
+            </button>
+            <button type="button" id="btn-view-timeline" class="btn-toggle-mode"
+              title="Hiển thị dạng dòng thời gian trực quan">
+              <span>⏱️</span> Dòng thời gian
+            </button>
+          </div>
+        </div>
+
+        <!-- Status Filter Chips (Chỉ 3 trạng thái chuẩn y tế) -->
+        <div class="history-status-chips">
+          <span class="toolbar-label" style="margin-right:0.25rem;">Trạng thái:</span>
+          <button type="button" class="filter-chip active" data-filter="ALL">Tất cả</button>
+          <button type="button" class="filter-chip" data-filter="TAKEN">🟢 Theo cữ</button>
+          <button type="button" class="filter-chip" data-filter="EARLY_TAKEN">🔵 Lấy sớm</button>
+          <button type="button" class="filter-chip" data-filter="MISSED">🟡 Bỏ lỡ</button>
+        </div>
+      </div>
+
+      <!-- VIEW 1: DATA TABLE VIEW (THEO BUỔI TRONG NGÀY) -->
+      <div id="history-table-container" class="table-responsive history-view-pane active">
+        <table class="data-table history-table">
           <tbody id="history-table-body">
             <!-- Rendered dynamically by app.js -->
           </tbody>
         </table>
+      </div>
+
+      <!-- VIEW 2: VERTICAL TIMELINE VIEW (TRONG NGÀY) -->
+      <div id="history-timeline-container" class="history-view-pane" style="display:none;">
+        <div id="history-timeline-body" class="timeline-wrapper">
+          <!-- Rendered dynamically by app.js -->
+        </div>
       </div>
     </section>
 

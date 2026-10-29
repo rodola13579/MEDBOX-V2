@@ -99,10 +99,13 @@ struct SlotSchedule {
 };
 
 struct Hist {
-  uint8_t day;
-  uint16_t min;
-  uint8_t slot;
-  uint8_t type;
+  uint8_t day;       // 0..6 (T2..CN)
+  uint16_t min;      // 0..1439 (Thời gian thực tế ghi nhận)
+  uint8_t slot;      // 0..6 (Ngăn 1..7)
+  uint8_t type;      // 0: H_TAKEN, 1: H_MISS, 2: H_MANUAL (Uống sớm)
+  uint8_t session;   // 0: Sáng, 1: Trưa, 2: Chiều, 3: Tối, 0xFF: None
+  uint8_t sched_h;   // Giờ cữ hẹn (0xFF nếu không có)
+  uint8_t sched_m;   // Phút cữ hẹn (0xFF nếu không có)
 };
 
 // ----------------------------------------------------------------------------
@@ -211,7 +214,7 @@ void goTo(Screen s);
 void toggleWifiMode();
 void saveCfg();
 void sortSched();
-void addHist(int slot, uint8_t type);
+void addHist(int slot, uint8_t type, uint8_t sessionIdx = 0xFF, uint8_t schedH = 0xFF, uint8_t schedM = 0xFF);
 void consumeDose(int s);
 
 // Đồng bộ thời gian hệ thống (từ NTP hoặc Backend MQTT)

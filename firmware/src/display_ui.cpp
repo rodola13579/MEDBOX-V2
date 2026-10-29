@@ -919,33 +919,115 @@ void drawNum(bool full) {
 
 // ----------------------------------------------------------------------------
 // MÀN HÌNH 10: XEM LỊCH SỬ UỐNG THUỐC (S_HIST)
+// Hiển thị 5 trường: Thứ cữ, Giờ cữ, Tên thuốc, Trạng thái (Dung cu/Lay som/Bo cu), Giờ lấy đúng
+// Bố cục phân cột cố định trên chiều rộng 320px (IPS ST7789), tuyệt đối không tràn màn hình.
 // ----------------------------------------------------------------------------
-void drawHistRow(int r) {
-  tft.setTextSize(1);
-  tft.setTextDatum(TL_DATUM);
-  int k = histTop + r;
-  if (k >= histCount) {
-    drawRowAt(r, false, C_FG, NULL);
+static void getHistSchedTime(const Hist &h, char *buf, size_t len) {
+  if (h.sched_h != 0xFF && h.sched_m != 0xFF) {
+    snprintf(buf, len, "%02d:%02d", h.sched_h, h.sched_m);
     return;
   }
+  // Tìm giờ cữ trong slotSched theo slot và session
+  for (int i = 0; i < nSlotSched; i++) {
+    if (slotSched[i].slot == h.slot && slotSched[i].active) {
+      if (h.session < 4) {
+        if (getSessionIndexFromHour(slotSched[i].hour) == h.session) {
+          snprintf(buf, len, "%02d:%02d", slotSched[i].hour, slotSched[i].minute);
+          return;
+        }
+      } else {
+        snprintf(buf, len, "%02d:%02d", slotSched[i].hour, slotSched[i].minute);
+        return;
+      }
+    }
+  }
+  // Fallback nếu không có cữ hẹn cụ thể
+  if (h.type == H_TAKEN) {
+    snprintf(buf, len, "%02d:%02d", h.min / 60, h.min % 60);
+  } else {
+    snprintf(buf, len, "--:--");
+  }
+}
+
+static void getHistMedName(uint8_t slot, char *buf, size_t len) {
+  if (slot < N_SLOTS && meds[slot].name[0] != '\0') {
+    strncpy(buf, meds[slot].name, len - 1);
+    buf[len - 1] = '\0';
+  } else {
+    snprintf(buf, len, "Ng%d", slot + 1);
+  }
+}
+
+void drawHistRow(int r) {
+  int rh = 12 * UI; // 24px
+  int y = HDR_H + r * rh;
+  uint16_t bg = (r % 2 == 1) ? C_CARD : C_BG;
+
+  int k = histTop + r;
+  if (k >= histCount) {
+    tft.fillRect(4, y, W - 8, rh - 2, C_BG);
+    return;
+  }
+
+  tft.fillRoundRect(4, y, W - 8, rh - 2, 4, bg);
+
   int idx = ((int)histHead - 1 - k + 2 * N_HIST) % N_HIST;
   Hist &h = hist[idx];
+
+  // 1. Thứ cữ + Giờ cữ hẹn (ví dụ: "T2 08:00")
+  char schedTimeStr[8];
+  getHistSchedTime(h, schedTimeStr, sizeof(schedTimeStr));
+  char schedColText[16];
+  snprintf(schedColText, sizeof(schedColText), "%s %s", DAY_NAMES[h.day % 7], schedTimeStr);
+
+  // 2. Tên thuốc (tối đa 7 ký tự để không tràn)
+  char medName[10];
+  getHistMedName(h.slot, medName, sizeof(medName));
+
+  // 3. Trạng thái: Dung cu / Lay som / Bo cu
   const char *tn;
-  uint16_t col;
+  uint16_t statusCol;
   if (h.type == H_TAKEN) {
-    tn = "Da uong";
-    col = C_OK;
+    tn = "Dung cu";
+    statusCol = C_OK;
   } else if (h.type == H_MISS) {
-    tn = "Bo lo";
-    col = C_RED;
+    tn = "Bo cu";
+    statusCol = C_RED;
   } else {
-    tn = "Lay ngay";
-    col = C_ACC;
+    tn = "Lay som";
+    statusCol = C_ACC;
   }
-  char b[40];
-  snprintf(b, sizeof(b), "%s %02d:%02d  Ngan %d  %s", DAY_NAMES[h.day % 7],
-           h.min / 60, h.min % 60, h.slot + 1, tn);
-  drawRowAt(r, false, col, b);
+
+  // 4. Giờ lấy đúng (thời điểm thực tế bệnh nhân lấy)
+  char actBuf[10];
+  uint16_t actCol = C_FG;
+  if (h.type == H_MISS) {
+    strcpy(actBuf, "--:--");
+    actCol = C_DIM;
+  } else {
+    snprintf(actBuf, sizeof(actBuf), "%02d:%02d", h.min / 60, h.min % 60);
+  }
+
+  // Vẽ các cột thẳng hàng tuyệt đối với Font 2 (cao 16px)
+  tft.setTextSize(1);
+  tft.setTextDatum(TL_DATUM);
+  int textY = y + (rh - 16) / 2;
+
+  // Cột 1: Thứ & Giờ cữ (X = 8, rộng ~75px)
+  tft.setTextColor(C_FG, bg);
+  tft.drawString(schedColText, 8, textY, 2);
+
+  // Cột 2: Tên thuốc (X = 90, rộng ~68px)
+  tft.setTextColor(C_WARN, bg); // Màu vàng hổ phách sáng
+  tft.drawString(medName, 90, textY, 2);
+
+  // Cột 3: Trạng thái (X = 168, rộng ~72px)
+  tft.setTextColor(statusCol, bg);
+  tft.drawString(tn, 168, textY, 2);
+
+  // Cột 4: Giờ lấy đúng (X = 252, rộng ~50px)
+  tft.setTextColor(actCol, bg);
+  tft.drawString(actBuf, 252, textY, 2);
 }
 
 void drawHist(bool full) {
@@ -1551,6 +1633,7 @@ void drawDueAlert(bool full) {
 
   FsmState st = fsmGetState();
   int actSlot = fsmGetActiveSlot();
+  int dispSlot = (actSlot >= 1 && actSlot <= N_SLOTS) ? actSlot : currentMotorSlot;
   uint32_t remainSec = fsmGetRemainingTimeoutSec();
   uint32_t totalSec = (st == FSM_ALERTING_DUE) ? 900 : 300;
   if (totalSec == 0)
@@ -1592,7 +1675,7 @@ void drawDueAlert(bool full) {
       tft.setTextColor(C_FG, 0x02E5);
       char hdr[48];
       snprintf(hdr, sizeof(hdr), ">>> DANG MO NGAN %d O CUA 6H <<<",
-               currentMotorSlot);
+               dispSlot);
       tft.drawCentreString(hdr, W / 2, 11, 2);
     } else {
       tft.fillRoundRect(8, 4, W - 16, 32, 6, 0x21E0);
@@ -1661,7 +1744,7 @@ void drawDueAlert(bool full) {
       tft.setTextColor(C_ACC, C_CARD);
       tft.drawString("Vui long doi khay xoay dung vi tri cua 6h...", 16, 168, 1);
     } else {
-      int s = currentMotorSlot - 1;
+      int s = dispSlot - 1;
       tft.setTextColor(C_OK, C_CARD);
       tft.drawString("[CUA LAY THUOC HUONG 6H DANG MO]", 16, 124, 2);
 
@@ -1670,7 +1753,7 @@ void drawDueAlert(bool full) {
           (s >= 0 && s < N_SLOTS && slotHasMed(s)) ? meds[s].name : "Thuoc";
       uint8_t d = (s >= 0 && s < N_SLOTS && meds[s].dose) ? meds[s].dose : 1;
       snprintf(medInfo, sizeof(medInfo), "Ngan %d: %s | Lieu uong: %d vien",
-               currentMotorSlot, nm, d);
+               dispSlot, nm, d);
       tft.setTextColor(C_FG, C_CARD);
       tft.drawString(medInfo, 16, 144, 2);
 
@@ -1696,7 +1779,7 @@ void drawDueAlert(bool full) {
     } else {
       int nextSlot = 0;
       for (int s = 0; s < N_SLOTS; s++) {
-        if (((dueMask >> s) & 1) && (s + 1 != currentMotorSlot)) {
+        if (((dueMask >> s) & 1) && (s + 1 != dispSlot)) {
           nextSlot = s + 1;
           break;
         }

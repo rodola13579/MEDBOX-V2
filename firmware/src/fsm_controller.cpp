@@ -136,30 +136,38 @@ void fsmTransitionTo(FsmState newState) {
 
         case FSM_ROTATING_TO_HOME: {
             homeDirty = false;
-            // Cập nhật số lượng và nhật ký y tế cho ngăn vừa uống
+            // 1. Cập nhật số lượng và nhật ký y tế cho ngăn vừa uống
             if (activeSlot >= 1 && activeSlot <= N_SLOTS) {
                 int sIdx = activeSlot - 1;
                 consumeDose(sIdx);
-                addHist(sIdx, isManualTake ? H_MANUAL : H_TAKEN);
-                dueMask &= ~(1 << sIdx);
-                mqttPublishTaken(activeSlot, meds[sIdx].dose ? meds[sIdx].dose : 1);
+                uint8_t schedH = 0xFF, schedM = 0xFF, sessIdx = 0xFF;
+                char schedTimeStr[8] = "";
+                if (activeSchedIndex >= 0 && activeSchedIndex < nSched) {
+                    schedH = sched[activeSchedIndex].h;
+                    schedM = sched[activeSchedIndex].m;
+                    sessIdx = getSessionIndexFromHour(schedH);
+                    snprintf(schedTimeStr, sizeof(schedTimeStr), "%02d:%02d", schedH, schedM);
+                }
+                addHist(sIdx, isManualTake ? H_MANUAL : H_TAKEN, sessIdx, schedH, schedM);
+                dueMask &= ~(1 << sIdx); // Xóa bit ngăn vừa hoàn tất
+                mqttPublishTaken(activeSlot, meds[sIdx].dose ? meds[sIdx].dose : 1, isManualTake ? "EARLY_MANUAL" : "LOCAL_BUTTON", schedTimeStr);
+                Serial.printf("[FSM] Da hoan tat Ngan %d -> dueMask con lai: 0x%02X\n", activeSlot, dueMask);
             }
             saveCfg();
 
-            // Kiểm tra xem cữ thuốc này còn ngăn nào khác cần uống không (Uống đa ngăn theo buổi)
+            // 2. Tìm ngăn tiếp theo trong cùng cữ thuốc (bỏ qua ngăn vừa uống)
             int nextSlot = 0;
             for (int s = 0; s < N_SLOTS; s++) {
-                if ((dueMask >> s) & 1) {
+                if (((dueMask >> s) & 1) && (s + 1 != activeSlot)) {
                     nextSlot = s + 1;
                     break;
                 }
             }
 
             if (nextSlot > 0) {
-                // Vẫn còn ngăn thuốc khác trong cùng mốc giờ / buổi -> Tiếp tục xoay thẳng sang ngăn tiếp theo, KHÔNG quay về 0!
+                // Vẫn còn ngăn thuốc khác -> Tiếp tục xoay thẳng sang ngăn tiếp theo, KHÔNG quay về 0!
                 activeSlot = nextSlot;
-                Serial.printf("[FSM] Con Ngan %d trong cung buoi, tiep tuc xoay thang den Ngan %d...\n", activeSlot, activeSlot);
-                audioPlayDispenseNext(); // 🔊 "Lấy ngăn tiếp theo..."
+                Serial.printf("[FSM] Con Ngan %d trong cung cu, tiep tuc xoay thang den Ngan %d...\n", activeSlot, activeSlot);
                 motorRotateToSlot(activeSlot);
                 mqttPublishSlotReached(activeSlot);
                 fsmTransitionTo(FSM_WAITING_TAKEN);
@@ -224,10 +232,18 @@ void fsmUpdate() {
             // 2. Xử lý quá hạn 15 phút (900 giây) mà bệnh nhân không lấy thuốc -> Bỏ lỡ
             if (now - stateEntryMs >= 900000) {
                 Serial.println("[FSM TIMEOUT] Qua 15 phut khong uong thuoc -> Ghi nhan BO LO (MISSED)");
+                uint8_t schedH = 0xFF, schedM = 0xFF, sessIdx = 0xFF;
+                char schedTimeStr[8] = "";
+                if (activeSchedIndex >= 0 && activeSchedIndex < nSched) {
+                    schedH = sched[activeSchedIndex].h;
+                    schedM = sched[activeSchedIndex].m;
+                    sessIdx = getSessionIndexFromHour(schedH);
+                    snprintf(schedTimeStr, sizeof(schedTimeStr), "%02d:%02d", schedH, schedM);
+                }
                 for (int s = 0; s < N_SLOTS; s++) {
                     if ((dueMask >> s) & 1) {
-                        addHist(s, H_MISS);
-                        mqttPublishMissed(s + 1);
+                        addHist(s, H_MISS, sessIdx, schedH, schedM);
+                        mqttPublishMissed(s + 1, schedTimeStr);
                     }
                 }
                 dueMask = 0;
@@ -241,10 +257,34 @@ void fsmUpdate() {
         }
 
         case FSM_WAITING_TAKEN: {
-            // Quá 5 phút (300 giây) mở khay mà bệnh nhân quên bấm K0 -> Tự động đóng khay về Slot 0 an toàn
+            // Quá 5 phút (300 giây) mở khay mà bệnh nhân không lấy thuốc -> Tự động đóng khay về Slot 0 Safe Home & GHI NHẬN MISSED
             if (now - stateEntryMs >= 300000) {
-                Serial.println("[FSM TIMEOUT] Qua 5 phut mo khay -> Tu dong khoa ve Slot 0 Safe Home");
-                fsmTransitionTo(FSM_ROTATING_TO_HOME);
+                Serial.printf("[FSM TIMEOUT] Qua 5 phut mo khay khong lay thuoc -> Ghi nhan MISSED (Ngan %d)\n", activeSlot);
+                uint8_t schedH = 0xFF, schedM = 0xFF, sessIdx = 0xFF;
+                char schedTimeStr[8] = "";
+                if (activeSchedIndex >= 0 && activeSchedIndex < nSched) {
+                    schedH = sched[activeSchedIndex].h;
+                    schedM = sched[activeSchedIndex].m;
+                    sessIdx = getSessionIndexFromHour(schedH);
+                    snprintf(schedTimeStr, sizeof(schedTimeStr), "%02d:%02d", schedH, schedM);
+                }
+                // Ghi nhận MISSED cho ngăn hiện tại và mọi ngăn chưa uống còn lại trong dueMask (KHÔNG trừ kho)
+                if (activeSlot >= 1 && activeSlot <= N_SLOTS) {
+                    addHist(activeSlot - 1, H_MISS, sessIdx, schedH, schedM);
+                    mqttPublishMissed(activeSlot, schedTimeStr);
+                }
+                for (int s = 0; s < N_SLOTS; s++) {
+                    if (((dueMask >> s) & 1) && (s != activeSlot - 1)) {
+                        addHist(s, H_MISS, sessIdx, schedH, schedM);
+                        mqttPublishMissed(s + 1, schedTimeStr);
+                    }
+                }
+                dueMask = 0;
+                activeSchedIndex = -1;
+                motorRotateToSlot(0);
+                mqttPublishHomeReached();
+                audioPlayMissedTimeout(); // 🔊 "Đã hết thời gian chờ lấy thuốc, cữ thuốc được ghi nhận là bỏ lỡ"
+                fsmTransitionTo(FSM_SAFE_HOME_IDLE);
                 if (screen == S_DUE_ALERT) {
                     goTo(S_HOME);
                 }
@@ -319,10 +359,15 @@ void fsmOnUserConfirmDose() {
     }
 }
 
-// 3. Bệnh nhân bấm K0 sau khi đã lấy xong thuốc -> Đóng khay về Slot 0
+// 3. Bệnh nhân bấm K0 sau khi đã lấy xong thuốc -> Đóng khay về Slot 0 hoặc chuyển ngăn
 void fsmOnUserTakenDone() {
+    Serial.printf("[FSM] fsmOnUserTakenDone() goi tu state=%s slot=%d dueMask=0x%02X\n",
+                  fsmGetStateString(), activeSlot, dueMask);
     if (currentState == FSM_WAITING_TAKEN) {
         fsmTransitionTo(FSM_ROTATING_TO_HOME);
+    } else {
+        Serial.printf("[FSM WARN] Bo qua fsmOnUserTakenDone: state=%s khong phai WAITING_TAKEN\n",
+                      fsmGetStateString());
     }
 }
 
@@ -334,6 +379,8 @@ void fsmTriggerManualDispense(int slot) {
     }
     if (slot < 1 || slot > N_SLOTS) return;
     activeSlot = slot;
+    dueMask = (1 << (slot - 1));
+    activeSchedIndex = -1;
     isManualTake = true;
     fsmTransitionTo(FSM_ROTATING_TO_DOSE);
 }

@@ -26,6 +26,9 @@ const uint8_t halfSteps[8] = {
     0x09  // IN4 + IN1
 };
 
+// Bộ đếm pha bước nửa bước (Half-step) dùng chung giữa homing và di chuyển tương đối
+static int gStepPhase = 0;
+
 // ----------------------------------------------------------------------------
 // 2. KHỞI TẠO & BẢO VỆ NGẮT ĐIỆN CUỘN DÂY
 // ----------------------------------------------------------------------------
@@ -55,13 +58,12 @@ bool isSensorAtHome() {
 void motorStepRelative(int steps, int delayUs) {
     if (steps == 0) return;
 
-    static int stepIdx = 0;
     int dir = (steps > 0) ? 1 : -1;
     int total = abs(steps);
 
     for (int s = 0; s < total; s++) {
-        stepIdx = (stepIdx + dir + 8) % 8;
-        uint8_t pattern = halfSteps[stepIdx];
+        gStepPhase = (gStepPhase + dir + 8) % 8;
+        uint8_t pattern = halfSteps[gStepPhase];
         for (int p = 0; p < 4; p++) {
             digitalWrite(motorPins[p], (pattern & (1 << p)) ? HIGH : LOW);
         }
@@ -105,8 +107,8 @@ bool autoHoming() {
     if (isSensorAtHome()) {
         Serial.println("[HOMING] Khay dang o tren vach den, lui nhe ra khoi vach...");
         int backSteps = 0;
-        while (isSensorAtHome() && backSteps < 150) {
-            motorStepRelative(-2, 1600);
+        while (isSensorAtHome() && backSteps < (150 * GEAR_RATIO)) {
+            motorStepRelative(-2, 1400);
             backSteps += 2;
             vTaskDelay(pdMS_TO_TICKS(1));
         }
@@ -115,11 +117,10 @@ bool autoHoming() {
 
     // 2. Quay toi tung nua buoc (half-step), kiem tra cam bien lien tuc
     int stepsTaken = 0;
-    static int stepIdx = 0;
 
     while (stepsTaken < HOMING_MAX_STEPS) {
-        stepIdx = (stepIdx + 1) % 8;
-        uint8_t pattern = halfSteps[stepIdx];
+        gStepPhase = (gStepPhase + 1) % 8;
+        uint8_t pattern = halfSteps[gStepPhase];
         for (int p = 0; p < 4; p++) {
             digitalWrite(motorPins[p], (pattern & (1 << p)) ? HIGH : LOW);
         }
@@ -138,6 +139,7 @@ bool autoHoming() {
             if (isSensorAtHome()) {
                 // GAP VACH DEN LA DUNG NGAY LAP TUC!
                 motorDeenergize();
+                gStepPhase = 0;
                 currentMotorSlot = 0;
                 homeOffset = 0;
                 jogDelta = 0;
@@ -150,7 +152,7 @@ bool autoHoming() {
 
     // Neu vuot qua so buoc toi da ma van chua gap vach -> Bao dong ket co
     motorDeenergize();
-    Serial.println("[HOMING ERROR] Qua 4500 buoc khong thay vach den TCRT5000! Kiem tra cam bien.");
+    Serial.printf("[HOMING ERROR] Qua %d buoc khong thay vach den TCRT5000! Kiem tra cam bien.\n", HOMING_MAX_STEPS);
     return false;
 }
 

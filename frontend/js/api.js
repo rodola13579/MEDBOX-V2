@@ -80,6 +80,10 @@ class SmartMedAPI {
     return this._fetch('/dispense/confirm', { method: 'POST' });
   }
 
+  async confirmDose() {
+    return this._fetch('/dispense/confirm-dose', { method: 'POST' });
+  }
+
   async returnHome() {
     return this._fetch('/dispense/home', { method: 'POST' });
   }
@@ -88,8 +92,11 @@ class SmartMedAPI {
     return this._fetch('/dispense/active');
   }
 
-  async getHistory(limit = 50) {
-    return this._fetch(`/dispense/history?limit=${limit}`);
+  async getHistory(limit = 50, status = null, date = null) {
+    let url = `/dispense/history?limit=${limit}`;
+    if (status) url += `&status=${encodeURIComponent(status)}`;
+    if (date) url += `&date=${encodeURIComponent(date)}`;
+    return this._fetch(url);
   }
 
   // --- Slots & Refill ---

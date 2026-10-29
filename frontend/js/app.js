@@ -83,6 +83,11 @@ document.addEventListener('DOMContentLoaded', async () => {
   setInterval(loadDashboardData, 10000);
 });
 
+function setupModals() {
+  setupHardwareView();
+  setupHistoryListeners();
+}
+
 // --- SPA Navigation ---
 function setupNavigation() {
   const tabBtns = document.querySelectorAll('.tab-btn');
@@ -629,15 +634,59 @@ function renderConsolePanel() {
   }
 
   const active = appState.activeSession;
+  const isDispenseActive = (active && active.is_active) || appState.device.fsm_state === 'WAITING_CONFIRM' || appState.device.fsm_state === 'WAITING_TAKEN';
+  const isDueAlerting = appState.device.fsm_state === 'ALERTING_DUE';
 
-  if (active && active.is_active) {
-    // Render Active Dispensing Session
+  if (isDueAlerting) {
+    // Render Cảnh báo cữ thuốc đến giờ (ALERTING_DUE)
+    consoleArea.innerHTML = `
+      <div class="active-session-card" style="border: 2px solid #f59e0b; background: linear-gradient(135deg, rgba(245, 158, 11, 0.12), rgba(16, 185, 129, 0.05));">
+        <div style="display:flex; justify-content:space-between; width:100%; align-items:center;">
+          <span style="font-size:0.85rem; font-weight:800; color:#f59e0b; letter-spacing:0.05em; display:flex; align-items:center; gap:0.4rem;">
+            <span>🔔</span> ĐÃ ĐẾN CỮ UỐNG THUỐC
+          </span>
+          <span class="status-chip" style="background:rgba(245, 158, 11, 0.2); color:#f59e0b; border:1px solid #f59e0b; font-weight:700;">
+            15 Phút Chờ
+          </span>
+        </div>
+
+        <div class="countdown-svg-wrapper">
+          <svg class="countdown-svg" viewBox="0 0 160 160">
+            <circle class="countdown-bg-circle" cx="80" cy="80" r="70"></circle>
+            <circle id="countdown-progress-ring" class="countdown-progress-circle" cx="80" cy="80" r="70"
+                    stroke-dasharray="440" stroke-dashoffset="0" style="stroke:#f59e0b;"></circle>
+          </svg>
+          <div class="countdown-text-overlay">
+            <span id="countdown-digits-text" class="countdown-digits tabular-nums" style="color:#f59e0b;">15:00</span>
+            <span class="countdown-subtext">Chuông báo thức cữ hẹn</span>
+          </div>
+        </div>
+
+        <div class="session-info">
+          <div class="session-pill-name">Hộp thuốc đang báo chuông nhắc nhở</div>
+          <div class="session-pill-meta">Vui lòng bấm nút trên hộp hoặc click nút bên dưới để mở khay lấy thuốc</div>
+        </div>
+
+        <div style="display:flex; flex-direction:column; gap:0.6rem; width:100%;">
+          <button id="btn-confirm-dose" class="btn btn-warning btn-lg" style="width:100%; font-weight:800; background:#f59e0b; color:#000; border:none; padding:0.9rem;" onclick="handleConfirmDose()">
+            🔔 Xác nhận đến uống thuốc (Mở khay)
+          </button>
+        </div>
+      </div>
+    `;
+    startActiveCountdown(null);
+  } else if (isDispenseActive) {
+    // Render Active Dispensing Session / Đang mở khay chờ lấy thuốc
+    const slotNum = (active && active.slot_number) ? active.slot_number : (appState.device.current_slot || 1);
+    const medName = (active && active.medicine_name) ? active.medicine_name : `Thuốc Ngăn ${slotNum}`;
+    const pillCount = (active && active.pill_count) ? active.pill_count : 1;
+
     consoleArea.innerHTML = `
       <div class="active-session-card">
         <div style="display:flex; justify-content:space-between; width:100%; align-items:center;">
-          <span style="font-size:0.85rem; font-weight:700; color:#10b981; letter-spacing:0.05em;">ĐANG CẤP THUỐC</span>
+          <span style="font-size:0.85rem; font-weight:700; color:#10b981; letter-spacing:0.05em;">ĐANG MỞ KHAY LẤY THUỐC</span>
           <span class="status-chip" style="background:rgba(255,255,255,0.1); color:#fff; border:none;">
-            Ngăn ${active.slot_number}
+            Ngăn ${slotNum}
           </span>
         </div>
 
@@ -648,19 +697,19 @@ function renderConsolePanel() {
                     stroke-dasharray="440" stroke-dashoffset="0"></circle>
           </svg>
           <div class="countdown-text-overlay">
-            <span id="countdown-digits-text" class="countdown-digits tabular-nums">15:00</span>
+            <span id="countdown-digits-text" class="countdown-digits tabular-nums">05:00</span>
             <span class="countdown-subtext">Đếm ngược lấy thuốc</span>
           </div>
         </div>
 
         <div class="session-info">
-          <div class="session-pill-name">${active.medicine_name || `Thuốc Ngăn ${active.slot_number}`}</div>
-          <div class="session-pill-meta">${active.pill_count || 1} viên • Hãy lấy thuốc qua cửa mở hướng 6 giờ</div>
+          <div class="session-pill-name">${medName}</div>
+          <div class="session-pill-meta">${pillCount} viên • Hãy lấy thuốc qua cửa mở hướng 6 giờ</div>
         </div>
 
         <div style="display:flex; flex-direction:column; gap:0.6rem; width:100%;">
           <button id="btn-confirm-taken" class="btn-confirm-safe" onclick="handleConfirmTaken()">
-            ✅ Xác nhận đã lấy thuốc ra & Về vị trí Safe 🔒
+            ✅ Xác nhận đã lấy thuốc ra & Chuyển tiếp / Về Safe 🔒
           </button>
           <button id="btn-emergency-home" class="btn btn-secondary btn-sm" style="width:100%;" onclick="handleEmergencyHome()">
             🏠 Hồi vị khẩn cấp về Safe Home
@@ -669,8 +718,7 @@ function renderConsolePanel() {
       </div>
     `;
 
-    // Start 15:00 countdown timer
-    startActiveCountdown(active.started_at);
+    startActiveCountdown(active ? active.started_at : null);
   } else {
     // Render Idle Control Console with dynamic bottom content
     stopActiveCountdown();
@@ -790,10 +838,20 @@ function stopActiveCountdown() {
   }
 }
 
+async function handleConfirmDose() {
+  try {
+    await window.api.confirmDose();
+    showToast('🔔 Đã xác nhận đến uống thuốc! Hộp thuốc đang mở khay...', 'info');
+    await loadDashboardData();
+  } catch (err) {
+    showToast(err.message || 'Lỗi khi xác nhận cữ thuốc', 'error');
+  }
+}
+
 async function handleConfirmTaken() {
   try {
     await window.api.confirmTaken();
-    showToast('✅ Xác nhận đã lấy thuốc ra thành công! Khay đã xoay về vị trí Safe an toàn 🔒', 'success');
+    showToast('✅ Xác nhận đã lấy thuốc ra thành công! Khay đang xoay chuyển tiếp / về Safe an toàn 🔒', 'success');
     if (appState.carousel2D) {
       appState.carousel2D.rotateToSlot(0);
       appState.carousel2D.setLEDState('green');
@@ -1089,85 +1147,817 @@ async function testMoveMotor(slot) {
 }
 
 // --- Tab 4: Audit Dose History ---
-async function loadHistoryData(filter = 'ALL') {
-  const tbody = document.getElementById('history-table-body');
-  if (!tbody) return;
+// ============================================================================
+// TAB 4: AUDIT DOSE HISTORY & ANALYTICS (TRA CỨU THEO TỪNG NGÀY)
+// ============================================================================
 
-  try {
-    tbody.innerHTML = `<tr><td colspan="5" style="text-align:center; padding:1.5rem;">Đang tải nhật ký...</td></tr>`;
-    const logs = await window.api.getHistory(50);
+const historyState = {
+  selectedDate: getLocalDateString(new Date()),
+  filter: 'ALL',
+  searchTerm: '',
+  viewMode: 'table',
+  allLogs: [],
+};
 
-    let filtered = logs;
-    if (filter === 'TAKEN') filtered = logs.filter((l) => l.status === 'TAKEN' || l.status === 'EARLY_TAKEN');
-    else if (filter === 'MISSED') filtered = logs.filter((l) => l.status === 'MISSED');
-    else if (filter === 'JAMMED') filtered = logs.filter((l) => l.status === 'JAMMED');
+function getLocalDateString(d = new Date()) {
+  const year = d.getFullYear();
+  const month = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+}
 
-    if (filtered.length === 0) {
-      tbody.innerHTML = `<tr><td colspan="5" style="text-align:center; padding:1.5rem; color:var(--text-muted);">Không có bản ghi nào.</td></tr>`;
-      return;
+function parseDateSafe(dateStr) {
+  if (!dateStr) return null;
+  if (dateStr instanceof Date) return dateStr;
+  const s = String(dateStr).trim().replace(' ', 'T');
+  const d = new Date(s);
+  return isNaN(d.getTime()) ? null : d;
+}
+
+function getDayOfWeekVN(dateInput) {
+  const d = parseDateSafe(dateInput) || new Date();
+  const days = ['Chủ Nhật', 'Thứ Hai', 'Thứ Ba', 'Thứ Tư', 'Thứ Năm', 'Thứ Sáu', 'Thứ Bảy'];
+  return days[d.getDay()];
+}
+
+function formatDateOnlyVN(dateStr) {
+  const d = parseDateSafe(dateStr);
+  if (!d) return '--';
+  const day = String(d.getDate()).padStart(2, '0');
+  const month = String(d.getMonth() + 1).padStart(2, '0');
+  const year = d.getFullYear();
+  return `${day}/${month}/${year}`;
+}
+
+function formatTimeOnlyVN(dateStr) {
+  const d = parseDateSafe(dateStr);
+  if (!d) return '--:--';
+  const hours = String(d.getHours()).padStart(2, '0');
+  const minutes = String(d.getMinutes()).padStart(2, '0');
+  return `${hours}:${minutes}`;
+}
+
+function formatFullDateTimeVN(dateStr) {
+  const d = parseDateSafe(dateStr);
+  if (!d) return '--';
+  const hours = String(d.getHours()).padStart(2, '0');
+  const minutes = String(d.getMinutes()).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  const month = String(d.getMonth() + 1).padStart(2, '0');
+  const year = d.getFullYear();
+  return `${hours}:${minutes} - ${day}/${month}/${year}`;
+}
+
+function normalizeActualDate(actualStr, schedStr) {
+  if (!actualStr) return null;
+  const dActual = parseDateSafe(actualStr);
+  if (!dActual) return null;
+
+  if (schedStr) {
+    const dSched = parseDateSafe(schedStr);
+    if (dSched) {
+      const rawDiffMin = (dActual.getTime() - dSched.getTime()) / 60000;
+      if (rawDiffMin <= -330 && rawDiffMin >= -510) {
+        return new Date(dActual.getTime() + 7 * 3600 * 1000);
+      }
     }
+  }
+  return dActual;
+}
 
-    tbody.innerHTML = filtered
-      .map((log) => {
-        let statusBadge = '';
-        if (log.status === 'TAKEN') statusBadge = '<span class="status-badge taken">🟢 Đã uống</span>';
-        else if (log.status === 'EARLY_TAKEN') statusBadge = '<span class="status-badge early">🔵 Lấy sớm</span>';
-        else if (log.status === 'MISSED') statusBadge = '<span class="status-badge missed">🟡 Bỏ lỡ</span>';
-        else if (log.status === 'JAMMED') statusBadge = '<span class="status-badge jammed">🔴 Kẹt cơ</span>';
-        else statusBadge = `<span class="status-badge">${log.status}</span>`;
+function formatDeltaDuration(diffMin) {
+  const abs = Math.abs(diffMin);
+  const h = Math.floor(abs / 60);
+  const m = abs % 60;
+  if (h > 0 && m > 0) return `${h}h ${m}p`;
+  if (h > 0) return `${h} giờ`;
+  return `${m} phút`;
+}
 
-        const timeStr = log.dispensed_at ? new Date(log.dispensed_at).toLocaleString('vi-VN') : '--';
+const SESSIONS_CONFIG = {
+  morning: {
+    key: 'morning',
+    order: 1,
+    name: 'Buổi Sáng',
+    icon: '🌅',
+    timeRange: '05:00 - 10:59',
+    badgeClass: 'session-morning',
+  },
+  noon: {
+    key: 'noon',
+    order: 2,
+    name: 'Buổi Trưa',
+    icon: '☀️',
+    timeRange: '11:00 - 13:59',
+    badgeClass: 'session-noon',
+  },
+  afternoon: {
+    key: 'afternoon',
+    order: 3,
+    name: 'Buổi Chiều',
+    icon: '🌤️',
+    timeRange: '14:00 - 17:59',
+    badgeClass: 'session-afternoon',
+  },
+  evening: {
+    key: 'evening',
+    order: 4,
+    name: 'Buổi Tối',
+    icon: '🌙',
+    timeRange: '18:00 - 04:59',
+    badgeClass: 'session-evening',
+  },
+};
 
-        return `
-        <tr>
-          <td><strong>#${log.id}</strong></td>
-          <td class="tabular-nums">${timeStr}</td>
-          <td>Ngăn ${log.slot_number}</td>
-          <td>${log.medicine_name || '--'}</td>
-          <td>${statusBadge}</td>
-        </tr>
-      `;
-      })
-      .join('');
-  } catch (err) {
-    tbody.innerHTML = `<tr><td colspan="5" style="text-align:center; color:var(--danger-red);">Lỗi tải nhật ký: ${err.message}</td></tr>`;
+function getSessionInfo(log) {
+  const textToCheck = `${log.schedule_label || ''} ${log.notes || ''}`.toLowerCase();
+  if (textToCheck.includes('sáng') || textToCheck.includes('sang') || textToCheck.includes('morning')) {
+    return SESSIONS_CONFIG.morning;
+  }
+  if (textToCheck.includes('trưa') || textToCheck.includes('trua') || textToCheck.includes('noon')) {
+    return SESSIONS_CONFIG.noon;
+  }
+  if (textToCheck.includes('chiều') || textToCheck.includes('chieu') || textToCheck.includes('afternoon')) {
+    return SESSIONS_CONFIG.afternoon;
+  }
+  if (textToCheck.includes('tối') || textToCheck.includes('toi') || textToCheck.includes('evening') || textToCheck.includes('night')) {
+    return SESSIONS_CONFIG.evening;
+  }
+
+  let hour = -1;
+  if (log.schedule_time && typeof log.schedule_time === 'string' && log.schedule_time.includes(':')) {
+    hour = parseInt(log.schedule_time.split(':')[0], 10);
+  }
+  if (isNaN(hour) || hour < 0) {
+    const dSched = parseDateSafe(log.scheduled_time);
+    if (dSched) hour = dSched.getHours();
+  }
+  if (isNaN(hour) || hour < 0) {
+    const dActual = parseDateSafe(log.confirmed_time || log.dispensed_time || log.created_at);
+    if (dActual) hour = dActual.getHours();
+  }
+
+  if (hour >= 5 && hour < 11) return SESSIONS_CONFIG.morning;
+  if (hour >= 11 && hour < 14) return SESSIONS_CONFIG.noon;
+  if (hour >= 14 && hour < 18) return SESSIONS_CONFIG.afternoon;
+  return SESSIONS_CONFIG.evening;
+}
+
+function calcAdherenceDelta(log) {
+  if (log.status === 'MISSED') {
+    return {
+      label: 'Bỏ lỡ',
+      badgeClass: 'missed',
+      diffText: 'Không lấy',
+    };
+  }
+
+  if (log.status === 'EARLY_TAKEN' || log.trigger_source === 'EARLY_MANUAL') {
+    return {
+      label: 'Lấy sớm',
+      badgeClass: 'early',
+      diffText: '⚡ Lấy sớm',
+    };
+  }
+
+  const dActual = normalizeActualDate(log.confirmed_time || log.dispensed_time, log.scheduled_time);
+  const dSched = parseDateSafe(log.scheduled_time);
+
+  if (dActual && dSched) {
+    const diffMin = Math.round((dActual.getTime() - dSched.getTime()) / 60000);
+    if (Math.abs(diffMin) <= 15) {
+      return {
+        label: 'Đúng cữ',
+        badgeClass: 'on-time',
+        diffText: diffMin === 0 ? '✓ Đúng giờ' : (diffMin > 0 ? `+${diffMin}p` : `${diffMin}p`),
+      };
+    }
+    if (diffMin > 15) {
+      return {
+        label: 'Uống trễ',
+        badgeClass: 'late',
+        diffText: `⏱️ Trễ ${formatDeltaDuration(diffMin)}`,
+      };
+    }
+    return {
+      label: 'Lấy sớm',
+      badgeClass: 'early',
+      diffText: `⚡ Sớm ${formatDeltaDuration(Math.abs(diffMin))}`,
+    };
+  }
+
+  return { label: 'Theo cữ', badgeClass: 'on-time', diffText: '✓ Đúng giờ' };
+}
+
+function getUnifiedStatusBadge(log) {
+  if (log.status === 'EARLY_TAKEN' || log.trigger_source === 'EARLY_MANUAL') {
+    return {
+      type: 'EARLY_TAKEN',
+      text: 'Lấy sớm',
+      badgeHtml: '<span class="status-badge early">🔵 Lấy sớm</span>',
+      nodeClass: 'early',
+    };
+  }
+  if (log.status === 'MISSED') {
+    return {
+      type: 'MISSED',
+      text: 'Bỏ lỡ',
+      badgeHtml: '<span class="status-badge missed">🟡 Bỏ lỡ</span>',
+      nodeClass: 'missed',
+    };
+  }
+  return {
+    type: 'TAKEN',
+    text: 'Theo cữ',
+    badgeHtml: '<span class="status-badge taken">🟢 Theo cữ</span>',
+    nodeClass: 'taken',
+  };
+}
+
+function getSlotBadgeHtml(slotNumber) {
+  const num = parseInt(slotNumber, 10);
+  if (num === 0) return `<span class="status-badge" style="background:#e2e8f0; color:#334155;">Safe Home</span>`;
+  return `<span class="status-chip" style="background:var(--primary-light); color:var(--primary); font-weight:800; border:1px solid var(--primary-border);">Ngăn ${num}</span>`;
+}
+
+function updateHistoryKPIs(logs) {
+  const total = logs.length;
+  const taken = logs.filter((l) => l.status === 'TAKEN' || l.status === 'EARLY_TAKEN' || l.trigger_source === 'EARLY_MANUAL').length;
+  const missed = logs.filter((l) => l.status === 'MISSED').length;
+  const rate = total > 0 ? Math.round((taken / total) * 100) : 100;
+
+  const adherenceEl = document.getElementById('hist-kpi-adherence');
+  const badgeEl = document.getElementById('hist-kpi-badge');
+  const totalEl = document.getElementById('hist-kpi-total');
+  const takenEl = document.getElementById('hist-kpi-taken');
+  const missedEl = document.getElementById('hist-kpi-missed');
+  const scopeEl = document.getElementById('hist-kpi-scope');
+
+  if (adherenceEl) adherenceEl.textContent = `${rate}%`;
+  if (badgeEl) {
+    if (rate >= 85) {
+      badgeEl.className = 'kpi-badge good';
+      badgeEl.textContent = 'Tốt';
+    } else if (rate >= 70) {
+      badgeEl.className = 'kpi-badge warning';
+      badgeEl.textContent = 'Khá';
+    } else {
+      badgeEl.className = 'kpi-badge danger';
+      badgeEl.textContent = 'Cần nhắc';
+    }
+  }
+  if (totalEl) totalEl.textContent = total;
+  if (takenEl) takenEl.textContent = taken;
+  if (missedEl) missedEl.textContent = missed;
+
+  if (scopeEl) {
+    const todayStr = getLocalDateString(new Date());
+    const yestStr = getLocalDateString(new Date(Date.now() - 86400000));
+    if (historyState.selectedDate === todayStr) {
+      scopeEl.textContent = `Hôm nay (${formatDateOnlyVN(todayStr)})`;
+    } else if (historyState.selectedDate === yestStr) {
+      scopeEl.textContent = `Hôm qua (${formatDateOnlyVN(yestStr)})`;
+    } else {
+      scopeEl.textContent = `Ngày ${formatDateOnlyVN(historyState.selectedDate)}`;
+    }
   }
 }
 
-// --- Modals Setup & Handlers ---
-function setupModals() {
-  setupHardwareView();
+function groupLogsBySession(logs) {
+  const sessions = {
+    morning: { ...SESSIONS_CONFIG.morning, doses: [] },
+    noon: { ...SESSIONS_CONFIG.noon, doses: [] },
+    afternoon: { ...SESSIONS_CONFIG.afternoon, doses: [] },
+    evening: { ...SESSIONS_CONFIG.evening, doses: [] },
+  };
 
-  // Close buttons
-  document.querySelectorAll('.btn-close-modal, .btn-cancel-modal').forEach((btn) => {
-    btn.addEventListener('click', () => {
-      document.querySelectorAll('.modal-backdrop').forEach((m) => m.classList.remove('active'));
-      // If closing refill modal without finishing, return tray to safe home
-      if (btn.closest('#modal-refill') && appState.carousel3D) {
-        appState.carousel3D.rotateToSlot(0);
-      }
+  logs.forEach((log) => {
+    const sessInfo = getSessionInfo(log);
+    sessions[sessInfo.key].doses.push(log);
+  });
+
+  Object.values(sessions).forEach((sess) => {
+    sess.doses.sort((a, b) => {
+      const timeA = a.schedule_time || formatTimeOnlyVN(a.scheduled_time) || '99:99';
+      const timeB = b.schedule_time || formatTimeOnlyVN(b.scheduled_time) || '99:99';
+      if (timeA !== timeB) return timeA.localeCompare(timeB);
+      return (a.id || 0) - (b.id || 0);
     });
   });
 
-  // Add Schedule Button & Modal
-  document.getElementById('btn-open-add-schedule')?.addEventListener('click', openAddScheduleModal);
+  return sessions;
+}
 
+function getMedicineInfoForLog(log) {
+  let rawName = (log.medicine_name && String(log.medicine_name).trim()) ? String(log.medicine_name).trim() : '';
+  let unit = (log.medicine_dosage_unit && String(log.medicine_dosage_unit).trim()) ? String(log.medicine_dosage_unit).trim() : '';
 
-  // Khởi tạo bộ chọn giờ chuẩn 24H (Giờ 00 - 23, Phút 00 - 59)
-  setupTimePicker24h();
+  if (!rawName && appState.slots && appState.slots.length > 0) {
+    const matchedSlot = appState.slots.find((s) => s.slot_number === log.slot_number);
+    if (matchedSlot && matchedSlot.medicine) {
+      if (matchedSlot.medicine.name && String(matchedSlot.medicine.name).trim()) {
+        rawName = String(matchedSlot.medicine.name).trim();
+      }
+      if (!unit && matchedSlot.medicine.dosage_unit) {
+        unit = String(matchedSlot.medicine.dosage_unit).trim();
+      }
+    }
+  }
 
-  // Submit Add Schedule Form
-  document.getElementById('form-add-schedule')?.addEventListener('submit', handleAddScheduleSubmit);
+  if (!rawName) {
+    rawName = `Thuốc Ngăn ${log.slot_number}`;
+  }
 
+  const medName = rawName.charAt(0).toUpperCase() + rawName.slice(1);
+  const medUnit = unit ? `(${unit})` : '(viên)';
+  return { medName, medUnit, rawName };
+}
 
+function renderHistoryTable(logs) {
+  const tbody = document.getElementById('history-table-body');
+  if (!tbody) return;
 
-  // History Filter Buttons
+  const curDateStr = historyState.selectedDate;
+  const dayName = getDayOfWeekVN(curDateStr);
+  const formattedDate = formatDateOnlyVN(curDateStr);
+
+  if (logs.length === 0) {
+    tbody.innerHTML = `
+      <tr class="table-day-row">
+        <td colspan="5">
+          <div class="table-day-header-inner">
+            <span>📅 ${dayName}, ${formattedDate}</span>
+            <span class="day-badge-total">0 cữ uống</span>
+          </div>
+        </td>
+      </tr>
+      <tr>
+        <td colspan="5" style="text-align:center; padding:3rem 1rem; color:var(--text-muted);">
+          <div style="font-size:2rem; margin-bottom:0.5rem;">🔍</div>
+          <div style="font-weight:700; color:var(--text-main); font-size:1rem;">Không có cữ uống nào trong ngày này</div>
+          <div style="font-size:0.85rem; margin-top:0.35rem;">Bạn có thể bấm nút "Hôm nay" hoặc chọn ngày khác để xem nhật ký.</div>
+        </td>
+      </tr>
+    `;
+    return;
+  }
+
+  const sessions = groupLogsBySession(logs);
+  let html = `
+    <tr class="table-day-row">
+      <td colspan="5">
+        <div class="table-day-header-inner">
+          <span>📅 ${dayName}, ${formattedDate}</span>
+          <span class="day-badge-total">${logs.length} cữ ghi nhận</span>
+        </div>
+      </td>
+    </tr>
+    <tr class="table-col-header-row">
+      <th style="width:130px;">⏰ Giờ Hẹn</th>
+      <th>💊 Ngăn & Tên Thuốc</th>
+      <th style="width:180px;">⏱️ Thời Gian Lấy Thực Tế</th>
+      <th style="width:140px;">🏷️ Trạng Thái</th>
+      <th style="width:110px; text-align:center;">🎯 Khay 2D</th>
+    </tr>
+  `;
+
+  const sessionKeys = ['morning', 'noon', 'afternoon', 'evening'];
+  sessionKeys.forEach((sessKey) => {
+    const sess = sessions[sessKey];
+    if (!sess.doses || sess.doses.length === 0) return;
+
+    html += `
+      <tr class="table-session-row ${sess.badgeClass}">
+        <td colspan="5">
+          <div class="table-session-header-inner">
+            <span class="session-pill ${sess.badgeClass}">
+              <span>${sess.icon}</span>
+              <strong>${sess.name}</strong>
+              <span class="session-timerange">(${sess.timeRange})</span>
+            </span>
+            <span class="session-count-tag">${sess.doses.length} cữ</span>
+          </div>
+        </td>
+      </tr>
+    `;
+
+    sess.doses.forEach((log) => {
+      let schedTime = log.schedule_time;
+      if (!schedTime && log.scheduled_time) schedTime = formatTimeOnlyVN(log.scheduled_time);
+      if (!schedTime) schedTime = '--:--';
+
+      const schedLabel = log.schedule_label || '';
+      const medInfo = getMedicineInfoForLog(log);
+      const medName = medInfo.medName;
+      const medUnit = medInfo.medUnit;
+
+      const dActualNorm = normalizeActualDate(log.confirmed_time || log.dispensed_time, log.scheduled_time);
+      const actualTimeStr = dActualNorm
+        ? `${String(dActualNorm.getHours()).padStart(2, '0')}:${String(dActualNorm.getMinutes()).padStart(2, '0')}:${String(dActualNorm.getSeconds()).padStart(2, '0')}`
+        : '--:--';
+
+      const adherence = calcAdherenceDelta(log);
+      const diffBadgeHtml = actualTimeStr !== '--:--'
+        ? `<span class="time-diff-badge ${adherence.badgeClass}">${adherence.diffText}</span>`
+        : (log.status === 'MISSED' ? `<span class="time-diff-badge missed">Không lấy</span>` : '');
+
+      const unifiedStatus = getUnifiedStatusBadge(log);
+
+      html += `
+        <tr class="dose-row">
+          <td>
+            <div class="dose-sched-wrap">
+              <span class="dose-sched-time tabular-nums">${schedTime}</span>
+              <div class="dose-meta-sub">
+                <span class="dose-id-tag">#${log.id}</span>
+                ${schedLabel ? `<span style="font-size:0.7rem; color:var(--text-muted);">${schedLabel}</span>` : ''}
+              </div>
+            </div>
+          </td>
+          <td>
+            <div class="dose-slot-med-wrap">
+              ${getSlotBadgeHtml(log.slot_number)}
+              <div class="dose-med-detail">
+                <strong class="dose-med-name">${medName}</strong>
+                <span class="dose-med-unit">${medUnit}</span>
+              </div>
+            </div>
+          </td>
+          <td>
+            <div class="dose-actual-wrap">
+              <span class="dose-actual-time tabular-nums ${actualTimeStr === '--:--' ? 'empty' : ''}">${actualTimeStr !== '--:--' ? actualTimeStr : (log.status === 'MISSED' ? 'Không lấy' : 'Chưa lấy')}</span>
+              ${diffBadgeHtml}
+            </div>
+          </td>
+          <td>
+            ${unifiedStatus.badgeHtml}
+          </td>
+          <td style="text-align:center;">
+            <button type="button" class="btn-inspect-slot" onclick="inspectSlotOnCarousel(${log.slot_number})" title="Xem ngăn ${log.slot_number} trên khay xoay 2D">
+              Khay 2D ↗
+            </button>
+          </td>
+        </tr>
+      `;
+    });
+  });
+
+  tbody.innerHTML = html;
+}
+
+function renderHistoryTimeline(logs) {
+  const container = document.getElementById('history-timeline-body');
+  if (!container) return;
+
+  const curDateStr = historyState.selectedDate;
+  const dayName = getDayOfWeekVN(curDateStr);
+  const formattedDate = formatDateOnlyVN(curDateStr);
+
+  if (logs.length === 0) {
+    container.innerHTML = `
+      <div style="text-align:center; padding:3rem 1rem; color:var(--text-muted);">
+        <div style="font-size:2.5rem; margin-bottom:0.5rem;">📅</div>
+        <div style="font-weight:700; color:var(--text-main);">Không có cữ uống nào trong ngày ${formattedDate}</div>
+        <div style="font-size:0.82rem; margin-top:0.25rem;">Bạn có thể chọn ngày khác để xem dòng thời gian.</div>
+      </div>
+    `;
+    return;
+  }
+
+  const sessions = groupLogsBySession(logs);
+  let html = `
+    <div style="margin-bottom:0.75rem; display:flex; justify-content:space-between; align-items:center;">
+      <strong style="font-size:1rem; color:var(--text-main);">📅 Dòng thời gian: ${dayName}, ${formattedDate}</strong>
+      <span class="day-badge-total">${logs.length} cữ uống</span>
+    </div>
+  `;
+
+  const sessionKeys = ['morning', 'noon', 'afternoon', 'evening'];
+  sessionKeys.forEach((sessKey) => {
+    const sess = sessions[sessKey];
+    if (!sess.doses || sess.doses.length === 0) return;
+
+    html += `
+      <div class="timeline-session-panel ${sess.badgeClass}">
+        <div class="timeline-session-header">
+          <div class="timeline-session-title">
+            <span class="session-icon">${sess.icon}</span>
+            <strong class="session-name">${sess.name}</strong>
+            <span class="session-timerange-chip">${sess.timeRange}</span>
+          </div>
+          <span class="session-doses-badge">${sess.doses.length} cữ</span>
+        </div>
+        <div class="timeline-session-items">
+    `;
+
+    sess.doses.forEach((log) => {
+      let schedTime = log.schedule_time;
+      if (!schedTime && log.scheduled_time) schedTime = formatTimeOnlyVN(log.scheduled_time);
+      if (!schedTime) schedTime = '--:--';
+
+      const schedLabel = log.schedule_label || '';
+      const medInfo = getMedicineInfoForLog(log);
+      const medName = medInfo.medName;
+      const medUnit = medInfo.medUnit;
+
+      const dActualNorm = normalizeActualDate(log.confirmed_time || log.dispensed_time, log.scheduled_time);
+      const actualTimeStr = dActualNorm
+        ? `${String(dActualNorm.getHours()).padStart(2, '0')}:${String(dActualNorm.getMinutes()).padStart(2, '0')}:${String(dActualNorm.getSeconds()).padStart(2, '0')}`
+        : '--:--';
+
+      const adherence = calcAdherenceDelta(log);
+      const diffBadgeHtml = actualTimeStr !== '--:--'
+        ? `<span class="time-diff-badge ${adherence.badgeClass}">${adherence.diffText}</span>`
+        : (log.status === 'MISSED' ? `<span class="time-diff-badge missed">Không lấy</span>` : '');
+
+      const unifiedStatus = getUnifiedStatusBadge(log);
+
+      html += `
+        <div class="timeline-dose-card ${unifiedStatus.nodeClass}">
+          <div class="dose-step-cell">
+            <span class="step-label">⏰ Giờ Hẹn</span>
+            <span class="step-val sched-time tabular-nums">${schedTime}</span>
+            <span style="font-size:0.7rem; color:var(--text-muted);">#${log.id} ${schedLabel}</span>
+          </div>
+          <div class="dose-step-cell">
+            <span class="step-label">💊 Ngăn & Thuốc</span>
+            <div style="display:flex; align-items:center; gap:0.4rem;">
+              ${getSlotBadgeHtml(log.slot_number)}
+              <strong style="font-size:0.92rem; color:#0f172a;">${medName}</strong>
+            </div>
+            <span style="font-size:0.72rem; color:var(--text-muted);">${medUnit}</span>
+          </div>
+          <div class="dose-step-cell">
+            <span class="step-label">⏱️ Thời Gian Lấy</span>
+            <span class="tabular-nums" style="font-weight:700; font-size:0.95rem; color:#0f172a;">${actualTimeStr !== '--:--' ? actualTimeStr : (log.status === 'MISSED' ? 'Không lấy' : 'Chưa lấy')}</span>
+            ${diffBadgeHtml}
+          </div>
+          <div class="dose-step-cell">
+            <span class="step-label">🏷️ Trạng Thái</span>
+            <div>${unifiedStatus.badgeHtml}</div>
+          </div>
+          <div style="text-align:right;">
+            <button type="button" class="btn-inspect-slot" onclick="inspectSlotOnCarousel(${log.slot_number})">
+              Khay 2D ↗
+            </button>
+          </div>
+        </div>
+      `;
+    });
+
+    html += `
+        </div>
+      </div>
+    `;
+  });
+
+  container.innerHTML = html;
+}
+
+function applyHistoryFilterAndSearch() {
+  let logs = historyState.allLogs;
+
+  if (historyState.filter && historyState.filter !== 'ALL') {
+    if (historyState.filter === 'TAKEN') {
+      logs = logs.filter((l) => l.status === 'TAKEN' || l.trigger_source === 'LOCAL_BUTTON');
+    } else if (historyState.filter === 'EARLY_TAKEN') {
+      logs = logs.filter((l) => l.status === 'EARLY_TAKEN' || l.trigger_source === 'EARLY_MANUAL');
+    } else if (historyState.filter === 'MISSED') {
+      logs = logs.filter((l) => l.status === 'MISSED');
+    }
+  }
+
+  const term = (historyState.searchTerm || '').trim().toLowerCase();
+  if (term) {
+    logs = logs.filter((l) => {
+      const idMatch = String(l.id).includes(term);
+      const slotMatch = `ngăn ${l.slot_number}`.includes(term) || String(l.slot_number) === term;
+      const medInfo = getMedicineInfoForLog(l);
+      const medMatch = medInfo.medName.toLowerCase().includes(term);
+      const notesMatch = (l.notes || '').toLowerCase().includes(term);
+      return idMatch || slotMatch || medMatch || notesMatch;
+    });
+  }
+
+  logs.sort((a, b) => {
+    const timeA = a.schedule_time || formatTimeOnlyVN(a.scheduled_time) || '99:99';
+    const timeB = b.schedule_time || formatTimeOnlyVN(b.scheduled_time) || '99:99';
+    if (timeA !== timeB) return timeA.localeCompare(timeB);
+    return (a.id || 0) - (b.id || 0);
+  });
+
+  updateHistoryKPIs(historyState.allLogs);
+
+  if (historyState.viewMode === 'timeline') {
+    renderHistoryTimeline(logs);
+  } else {
+    renderHistoryTable(logs);
+  }
+}
+
+async function loadHistoryData(targetDate = null, targetFilter = null, isSilent = false) {
+  const tbody = document.getElementById('history-table-body');
+
+  if (targetDate) historyState.selectedDate = targetDate;
+  if (targetFilter) historyState.filter = targetFilter;
+
+  // Sync date picker input
+  const datePicker = document.getElementById('history-date-picker');
+  if (datePicker && datePicker.value !== historyState.selectedDate) {
+    datePicker.value = historyState.selectedDate;
+  }
+
+  // Update quick buttons active state
+  const todayStr = getLocalDateString(new Date());
+  const yestStr = getLocalDateString(new Date(Date.now() - 86400000));
+  document.getElementById('btn-quick-today')?.classList.toggle('active', historyState.selectedDate === todayStr);
+  document.getElementById('btn-quick-yesterday')?.classList.toggle('active', historyState.selectedDate === yestStr);
+
+  const nextBtn = document.getElementById('btn-next-day');
+  if (nextBtn) {
+    nextBtn.disabled = (historyState.selectedDate >= todayStr);
+    nextBtn.style.opacity = (historyState.selectedDate >= todayStr) ? '0.4' : '1';
+  }
+
+  if (tbody && !isSilent && (!historyState.allLogs || historyState.allLogs.length === 0)) {
+    tbody.innerHTML = `<tr><td colspan="5" style="text-align:center; padding:2.5rem; color:var(--text-muted);"><div style="font-size:1.5rem;">⏳</div><div style="font-weight:700; margin-top:0.35rem;">Đang tải nhật ký ngày ${formatDateOnlyVN(historyState.selectedDate)}...</div></td></tr>`;
+  }
+
+  // Ensure slot medicine information is loaded
+  if (!appState.slots || appState.slots.length === 0) {
+    try {
+      const slotsData = await window.api.getSlots();
+      if (Array.isArray(slotsData)) appState.slots = slotsData;
+    } catch (_) {}
+  }
+
+  try {
+    const logs = await window.api.getHistory(
+      100,
+      historyState.filter !== 'ALL' ? historyState.filter : null,
+      historyState.selectedDate
+    );
+    historyState.allLogs = Array.isArray(logs) ? logs : [];
+    applyHistoryFilterAndSearch();
+  } catch (err) {
+    if (tbody && !isSilent) {
+      tbody.innerHTML = `<tr><td colspan="5" style="text-align:center; color:var(--danger-red); padding:1.5rem;">⚠️ Lỗi tải nhật ký: ${err.message}</td></tr>`;
+    }
+  }
+}
+
+function exportHistoryToCSV() {
+  const logs = historyState.allLogs;
+  if (!logs || logs.length === 0) {
+    showToast(`Không có dữ liệu cữ uống nào trong ngày ${formatDateOnlyVN(historyState.selectedDate)} để xuất.`, 'warning');
+    return;
+  }
+
+  const headers = ['Mã Cữ', 'Ngày Uống', 'Buổi', 'Giờ Hẹn', 'Ngăn Khay', 'Tên Thuốc', 'Liều Lượng', 'Thời Gian Lấy', 'Trạng Thái', 'Ghi Chú'];
+  const escapeCSV = (val) => `"${String(val || '').replace(/"/g, '""')}"`;
+
+  const rows = logs.map((l) => {
+    const schedDate = formatDateOnlyVN(l.scheduled_time || l.created_at);
+    let schedTime = l.schedule_time || formatTimeOnlyVN(l.scheduled_time) || '--:--';
+    const dActualNorm = normalizeActualDate(l.confirmed_time || l.dispensed_time, l.scheduled_time);
+    const actualTimeStr = dActualNorm ? formatTimeOnlyVN(dActualNorm) : '--:--';
+    const unifiedStatus = getUnifiedStatusBadge(l);
+    const sess = getSessionInfo(l);
+    const medInfo = getMedicineInfoForLog(l);
+
+    return [
+      escapeCSV(l.id),
+      escapeCSV(schedDate),
+      escapeCSV(sess.name),
+      escapeCSV(schedTime),
+      escapeCSV(`Ngăn ${l.slot_number}`),
+      escapeCSV(medInfo.medName),
+      escapeCSV(medInfo.medUnit.replace(/[()]/g, '')),
+      escapeCSV(actualTimeStr),
+      escapeCSV(unifiedStatus.text),
+      escapeCSV(l.notes || ''),
+    ].join(',');
+  });
+
+  const csvContent = '\uFEFF' + [headers.join(','), ...rows].join('\r\n');
+  const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `SmartMed_Lich_Su_${historyState.selectedDate}.csv`;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+  showToast(`📥 Đã xuất báo cáo ngày ${formatDateOnlyVN(historyState.selectedDate)} (${logs.length} cữ) sang CSV!`, 'success');
+}
+
+window.inspectSlotOnCarousel = function (slotNumber) {
+  const num = parseInt(slotNumber, 10);
+  if (isNaN(num)) return;
+  switchTab('tab-dashboard');
+  if (appState.carousel2D) appState.carousel2D.rotateToSlot(num);
+  if (appState.carousel3D && appState.carousel3D !== appState.carousel2D) appState.carousel3D.rotateToSlot(num);
+  window.scrollTo({ top: 0, behavior: 'smooth' });
+  setTimeout(() => {
+    const slotCard = document.querySelector(`.slot-card[data-slot="${num}"]`);
+    if (slotCard) {
+      slotCard.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      slotCard.style.outline = '3px solid var(--primary)';
+      setTimeout(() => { slotCard.style.outline = ''; }, 2500);
+    }
+  }, 200);
+  showToast(`🎯 Đang xoay mô hình 2D về Ngăn ${num} tại cửa mở 6 giờ`, 'info');
+};
+
+function shiftSelectedDate(days) {
+  const cur = parseDateSafe(historyState.selectedDate) || new Date();
+  cur.setDate(cur.getDate() + days);
+  const nextDateStr = getLocalDateString(cur);
+  const todayStr = getLocalDateString(new Date());
+  if (nextDateStr > todayStr) return; // Do not go into the future
+  loadHistoryData(nextDateStr);
+}
+
+function setupHistoryListeners() {
+  document.getElementById('btn-refresh-history')?.addEventListener('click', () => {
+    loadHistoryData(null, null, false);
+    showToast('Đã làm mới dữ liệu cữ uống.', 'info');
+  });
+
+  document.getElementById('btn-export-history-csv')?.addEventListener('click', exportHistoryToCSV);
+
+  // Single Day Navigation
+  document.getElementById('btn-prev-day')?.addEventListener('click', () => shiftSelectedDate(-1));
+  document.getElementById('btn-next-day')?.addEventListener('click', () => shiftSelectedDate(1));
+
+  const datePicker = document.getElementById('history-date-picker');
+  if (datePicker) {
+    datePicker.value = historyState.selectedDate;
+    datePicker.addEventListener('change', (e) => {
+      if (e.target.value) loadHistoryData(e.target.value);
+    });
+  }
+
+  document.getElementById('btn-quick-today')?.addEventListener('click', () => {
+    loadHistoryData(getLocalDateString(new Date()));
+  });
+
+  document.getElementById('btn-quick-yesterday')?.addEventListener('click', () => {
+    loadHistoryData(getLocalDateString(new Date(Date.now() - 86400000)));
+  });
+
+  // Search Input
+  const searchInput = document.getElementById('history-search-input');
+  const clearBtn = document.getElementById('btn-clear-search');
+  if (searchInput) {
+    searchInput.addEventListener('input', (e) => {
+      historyState.searchTerm = e.target.value;
+      if (clearBtn) clearBtn.style.display = e.target.value ? 'block' : 'none';
+      applyHistoryFilterAndSearch();
+    });
+  }
+  if (clearBtn) {
+    clearBtn.addEventListener('click', () => {
+      if (searchInput) searchInput.value = '';
+      historyState.searchTerm = '';
+      clearBtn.style.display = 'none';
+      applyHistoryFilterAndSearch();
+    });
+  }
+
+  // Dual View Mode Toggle
+  const btnTable = document.getElementById('btn-view-table');
+  const btnTimeline = document.getElementById('btn-view-timeline');
+  const tableContainer = document.getElementById('history-table-container');
+  const timelineContainer = document.getElementById('history-timeline-container');
+
+  btnTable?.addEventListener('click', () => {
+    btnTable.classList.add('active');
+    btnTimeline?.classList.remove('active');
+    if (tableContainer) tableContainer.style.display = 'block';
+    if (timelineContainer) timelineContainer.style.display = 'none';
+    historyState.viewMode = 'table';
+    applyHistoryFilterAndSearch();
+  });
+
+  btnTimeline?.addEventListener('click', () => {
+    btnTimeline.classList.add('active');
+    btnTable?.classList.remove('active');
+    if (tableContainer) tableContainer.style.display = 'none';
+    if (timelineContainer) timelineContainer.style.display = 'block';
+    historyState.viewMode = 'timeline';
+    applyHistoryFilterAndSearch();
+  });
+
+  // 3-Status Filter Chips
   document.querySelectorAll('.filter-chip').forEach((chip) => {
     chip.addEventListener('click', () => {
       document.querySelectorAll('.filter-chip').forEach((c) => c.classList.remove('active'));
       chip.classList.add('active');
       const filter = chip.getAttribute('data-filter');
-      loadHistoryData(filter);
+      historyState.filter = filter;
+      loadHistoryData(null, filter);
     });
   });
 }
@@ -1793,6 +2583,17 @@ function setupWebSocket() {
     showToast(`Đã nhận lịch mới từ thiết bị (EC11): ${slotInfo} ${timeInfo}`, 'info');
     loadDashboardData();
   });
+
+  window.wsClient.on('dose_due', (data) => {
+    console.log('[WS] dose_due event:', data);
+    const med = data.medicine_name || data.label || 'Vui lòng kiểm tra khay';
+    showToast(`🔔 ĐÃ ĐẾN CỮ UỐNG THUỐC: ${med}`, 'warning');
+    if (appState.carousel3D) appState.carousel3D.setLEDState('amber');
+    appState.device.fsm_state = 'ALERTING_DUE';
+    renderStatsCards();
+    renderConsolePanel();
+    loadDashboardData();
+  });
 }
 
 // --- Real-time Digital Clock ---
@@ -1838,6 +2639,7 @@ window.setInlineQuickAmount = setInlineQuickAmount;
 window.setInlineDose = setInlineDose;
 window.handleInlineRefillSubmit = handleInlineRefillSubmit;
 window.handleInlineEarlyDispenseSubmit = handleInlineEarlyDispenseSubmit;
+window.handleConfirmDose = handleConfirmDose;
 window.handleConfirmTaken = handleConfirmTaken;
 window.handleEmergencyHome = handleEmergencyHome;
 window.toggleScheduleActive = toggleScheduleActive;

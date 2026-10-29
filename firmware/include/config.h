@@ -66,11 +66,14 @@
 // ----------------------------------------------------------------------------
 // 4. THÔNG SỐ CƠ KHÍ & ĐỘNG CƠ BƯỚC
 // ----------------------------------------------------------------------------
-#define TOTAL_SLOTS 8      // Slot 0 = Safe Home, Slot 1..7 = Thuốc
-#define STEPS_PER_REV 4096 // 28BYJ-48 Half-step 8 bước
-#define STEPS_PER_SLOT (STEPS_PER_REV / TOTAL_SLOTS) // 512 bước / ngăn
-#define MOTOR_STEP_DELAY_US 1200 // Tốc độ 1.2ms/bước (lực kéo khỏe, êm)
-#define HOMING_MAX_STEPS 4500    // Quá 4500 bước không thấy mốc -> Kẹt cơ
+#define TOTAL_SLOTS 8          // Slot 0 = Safe Home, Slot 1..7 = Thuốc
+#define GEAR_RATIO 4           // Tỉ số truyền bánh răng: 4 vòng motor = 1 vòng khay thuốc
+#define MOTOR_INTERNAL_STEPS 4096 // 1 vòng trục động cơ 28BYJ-48 (Half-step 8 bước)
+#define STEPS_PER_CAROUSEL_REV (MOTOR_INTERNAL_STEPS * GEAR_RATIO) // 16.384 bước / vòng khay
+#define STEPS_PER_REV STEPS_PER_CAROUSEL_REV // Tổng số bước cho 1 vòng khay hoàn chỉnh
+#define STEPS_PER_SLOT (STEPS_PER_REV / TOTAL_SLOTS) // 2.048 bước / ngăn
+#define MOTOR_STEP_DELAY_US 1000 // Tốc độ cố định 1000 µs (1.0ms/bước - nhanh và êm ái)
+#define HOMING_MAX_STEPS 18000   // Quá 18.000 bước không thấy mốc -> Kẹt cơ (~1.1 vòng khay)
 
 // ----------------------------------------------------------------------------
 // 5. MÀU SẮC GIAO DIỆN DARK MODE Y TẾ (RGB565)

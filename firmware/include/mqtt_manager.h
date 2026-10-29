@@ -24,9 +24,9 @@ bool mqttIsConnected();
 // Các hàm phát sự kiện phần cứng lên Backend
 void mqttPublishSlotReached(uint8_t slot);
 void mqttPublishHomeReached();
-void mqttPublishTaken(uint8_t slot, uint8_t dose = 1);
+void mqttPublishTaken(uint8_t slot, uint8_t dose = 1, const char *trigger = "LOCAL_BUTTON", const char *schedTime = nullptr);
 void mqttPublishEarlyTaken(uint8_t h, uint8_t m, uint8_t mask);
-void mqttPublishMissed(uint8_t slot);
+void mqttPublishMissed(uint8_t slot, const char *schedTime = nullptr);
 void mqttPublishDueAlert(uint8_t dueMask);
 void mqttPublishScheduleCreated(uint8_t h, uint8_t m, uint8_t mask,
                                 uint8_t activeMask = 0xFF);

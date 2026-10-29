@@ -75,7 +75,28 @@ async def early_session_dispense(payload: EarlySessionRequest):
         device_state.update_fsm("SAFE_HOME_IDLE")
         device_state.update_slot(0)
 
+    combined_mask = sum(1 << (s - 1) for s in payload.slots if 1 <= s <= 7)
     first_slot = payload.slots[0]
+
+    from device.mqtt_client import mqtt_client
+    from device.protocol import topic_cmd
+    from config import settings
+
+    if device_state.is_online and len(payload.slots) > 1:
+        await mqtt_client.publish(
+            topic_cmd(settings.DEVICE_ID, "dispense"),
+            {
+                "command": "DISPENSE",
+                "slot": first_slot,
+                "target_slot": first_slot,
+                "slots": payload.slots,
+                "mask": combined_mask,
+                "trigger_source": "EARLY_MANUAL",
+                "session_label": payload.session_label,
+                "timeout_seconds": settings.DISPENSE_TIMEOUT_SECONDS,
+            }
+        )
+
     return await dispensing_engine.dispense_now(
         slot_number=first_slot,
         trigger_source="EARLY_MANUAL",
@@ -164,8 +185,9 @@ async def calibrate():
     response_model=list[DoseLogResponse],
     summary="Lịch sử nhật ký uống thuốc",
     description=(
-        "Trả về lịch sử các cữ uống thuốc, mới nhất trước.\n\n"
-        "**Lọc theo status:** `TAKEN`, `MISSED`, `DISPENSED`, `PENDING`, `JAMMED`\n"
+        "Trả về lịch sử các cữ uống thuốc theo ngày, mới nhất trước.\n\n"
+        "**Lọc theo ngày:** `date=YYYY-MM-DD`\n"
+        "**Lọc theo status:** `TAKEN`, `EARLY_TAKEN`, `MISSED`\n"
         "**Giới hạn:** tối đa 200 bản ghi."
     ),
 )
@@ -173,10 +195,12 @@ async def get_history(
     db: DB,
     limit: Annotated[int, Query(ge=1, le=200, description="Số bản ghi tối đa")] = 50,
     status: Annotated[str | None, Query(description="Lọc theo status")] = None,
+    date: Annotated[str | None, Query(description="Lọc theo ngày (YYYY-MM-DD)")] = None,
 ):
     return await dose_log_repo.get_history(
         db,
         device_id=settings.DEVICE_ID,
         limit=limit,
         status_filter=status,
+        date_filter=date,
     )

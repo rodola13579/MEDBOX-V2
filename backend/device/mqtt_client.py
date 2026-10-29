@@ -354,7 +354,8 @@ class MQTTClient:
             await self._handle_sync_slots(data)
         elif event_type == "MISSED":
             logger.warning(f"MISSED DOSE nhận từ ESP32: {data}")
-            await ws_manager.broadcast("dose_missed", {**data, **device_state.to_dict()})
+            from services.dispensing_engine import dispensing_engine
+            await dispensing_engine.on_missed(data)
         elif event_type == "DUE_ALERT":
             logger.info(f"DUE_ALERT nhận từ ESP32: {data}")
             await ws_manager.broadcast("dose_due", {**data, **device_state.to_dict()})
